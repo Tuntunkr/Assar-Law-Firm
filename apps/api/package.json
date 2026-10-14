@@ -14,6 +14,8 @@
     "@assar/database": "workspace:*",
     "@assar/types": "workspace:*",
     "@assar/validation": "workspace:*",
+    "@aws-sdk/client-s3": "^3.1151.0",
+    "@aws-sdk/s3-request-presigner": "^3.1151.0",
     "@nestjs/common": "^12.1.3",
     "@nestjs/core": "^12.1.3",
     "@nestjs/platform-express": "^12.1.3",

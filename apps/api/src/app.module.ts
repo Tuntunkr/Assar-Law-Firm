@@ -11,10 +11,14 @@ import { rateLimits } from './common/rate-limits';
 import { ENV, type Env } from './config/env';
 import { DatabaseModule } from './database/database.module';
 import { HealthController } from './health/health.controller';
+import { CalendarModule } from './calendar/calendar.module';
 import { ClientsModule } from './clients/clients.module';
 import { ConflictsModule } from './conflicts/conflicts.module';
+import { DocumentsModule } from './documents/documents.module';
 import { MattersModule } from './matters/matters.module';
 import { OrganizationsModule } from './organizations/organizations.module';
+import { StorageModule } from './storage/storage.module';
+import { TasksModule } from './tasks/tasks.module';
 import { TeamsModule } from './teams/teams.module';
 
 @Module({})
@@ -36,6 +40,10 @@ export class AppModule {
         MattersModule,
         TeamsModule,
         ConflictsModule,
+        StorageModule,
+        DocumentsModule,
+        CalendarModule,
+        TasksModule,
       ],
       controllers: [HealthController],
       providers: [

@@ -23,7 +23,7 @@ export async function createApp(env: Env): Promise<NestExpressApplication> {
     allowedHeaders: ['content-type', 'x-csrf-token', 'idempotency-key', 'x-request-id'],
     exposedHeaders: ['x-request-id', 'idempotent-replayed'],
   });
-  app.setGlobalPrefix('v1', { exclude: ['healthz', 'readyz'] });
+  app.setGlobalPrefix('v1', { exclude: ['healthz', 'readyz', 'internal/storage'] });
   app.enableShutdownHooks();
   return app;
 }

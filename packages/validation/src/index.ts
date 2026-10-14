@@ -159,3 +159,114 @@ export const setTeamMembersSchema = z.object({ userIds: z.array(objectIdSchema).
 export const conflictCheckSchema = z.object({
   names: z.array(z.string().trim().min(2).max(200)).min(1).max(20),
 });
+
+// ---- Documents ----
+/** Content types accepted for upload. Anything else is rejected before a URL is issued. */
+export const ALLOWED_UPLOAD_TYPES = [
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/rtf',
+  'application/vnd.oasis.opendocument.text',
+  'text/plain',
+  'text/csv',
+  'message/rfc822',
+  'image/png',
+  'image/jpeg',
+  'image/tiff',
+] as const;
+
+/** Strips path separators and control characters so a filename is safe to store and echo. */
+const filenameSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(255)
+  .transform((s) => s.replace(/[\\/\u0000-\u001f\u007f"]/g, '_'))
+  .refine((s) => s !== '.' && s !== '..', 'Invalid filename');
+
+const uploadFields = {
+  filename: filenameSchema,
+  contentType: z.enum(ALLOWED_UPLOAD_TYPES),
+  sizeBytes: z.number().int().positive(),
+};
+export const createDocumentSchema = z.object({
+  title: z.string().trim().min(1).max(250),
+  ...uploadFields,
+});
+export const newVersionSchema = z.object(uploadFields);
+export const renameDocumentSchema = z.object({ title: z.string().trim().min(1).max(250) });
+export const documentListQuerySchema = paginationSchema;
+
+// ---- Calendar & tasks ----
+const isoDate = z
+  .string()
+  .datetime({ offset: true })
+  .transform((s) => new Date(s));
+
+const EVENT_KINDS = ['hearing', 'deadline', 'meeting', 'reminder', 'other'] as const;
+const eventFields = {
+  kind: z.enum(EVENT_KINDS),
+  title: z.string().trim().min(2).max(200),
+  description: optionalText(5000),
+  startsAt: isoDate,
+  endsAt: isoDate.nullable().optional(),
+  allDay: z.boolean().default(false),
+  location: optionalText(300),
+  attendeeIds: z.array(objectIdSchema).max(50).default([]),
+  matterId: objectIdSchema.nullable().optional(),
+};
+export const createEventSchema = z
+  .object(eventFields)
+  .refine((v) => !v.endsAt || v.endsAt >= v.startsAt, {
+    message: 'endsAt must not be before startsAt',
+    path: ['endsAt'],
+  });
+export const updateEventSchema = z
+  .object({ ...eventFields, status: z.enum(['scheduled', 'completed', 'cancelled']) })
+  .partial()
+  .refine((v) => Object.keys(v).length > 0, 'Provide at least one field');
+
+const MAX_RANGE_MS = 366 * 24 * 3600_000;
+export const eventListQuerySchema = paginationSchema
+  .extend({
+    from: isoDate,
+    to: isoDate,
+    kind: z.enum(EVENT_KINDS).optional(),
+    matterId: objectIdSchema.optional(),
+  })
+  .refine((v) => v.to > v.from, { message: '`to` must be after `from`', path: ['to'] })
+  .refine((v) => v.to.getTime() - v.from.getTime() <= MAX_RANGE_MS, {
+    message: 'Range may not exceed 366 days',
+    path: ['to'],
+  });
+
+const taskFields = {
+  title: z.string().trim().min(2).max(200),
+  description: optionalText(5000),
+  priority: z.enum(['low', 'normal', 'high']),
+  matterId: objectIdSchema.nullable(),
+  assigneeId: objectIdSchema.nullable(),
+  dueAt: isoDate.nullable(),
+};
+export const createTaskSchema = z.object({
+  title: taskFields.title,
+  description: taskFields.description,
+  priority: taskFields.priority.default('normal'),
+  matterId: taskFields.matterId.optional(),
+  assigneeId: taskFields.assigneeId.optional(),
+  dueAt: taskFields.dueAt.optional(),
+});
+export const updateTaskSchema = z
+  .object({ ...taskFields, status: z.enum(['todo', 'in_progress', 'done', 'cancelled']) })
+  .partial()
+  .refine((v) => Object.keys(v).length > 0, 'Provide at least one field');
+export const taskListQuerySchema = paginationSchema.extend({
+  /** A user id, or `me`. */
+  assigneeId: z.union([z.literal('me'), objectIdSchema]).optional(),
+  status: z.enum(['todo', 'in_progress', 'done', 'cancelled']).optional(),
+  matterId: objectIdSchema.optional(),
+  dueBefore: isoDate.optional(),
+});

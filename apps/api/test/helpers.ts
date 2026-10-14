@@ -164,3 +164,122 @@ export async function newMatter(
     throw new Error(`matter failed: ${res.status} ${JSON.stringify(res.body)}`);
   return res.body as { id: string; matterNumber: string };
 }
+
+// ---- Documents: fake clamd, local storage, upload helpers ----
+import { createServer, type Server } from 'node:net';
+import { mkdtempSync, readdirSync, rmSync, statSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { ScanService } from '../src/documents/scan.service';
+
+export const EICAR = 'X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*';
+
+/** A minimal clamd that speaks the INSTREAM protocol, so the real ClamAV client code is exercised. */
+export async function startFakeClamd() {
+  let mode: 'ok' | 'down' = 'ok';
+  const server: Server = createServer((sock) => {
+    if (mode === 'down') return void sock.destroy();
+    let buf = Buffer.alloc(0);
+    let started = false;
+    const parts: Buffer[] = [];
+    sock.on('error', () => undefined);
+    sock.on('data', (d: Buffer) => {
+      buf = Buffer.concat([buf, d]);
+      if (!started) {
+        const i = buf.indexOf(0);
+        if (i < 0) return;
+        if (buf.subarray(0, i).toString() !== 'zINSTREAM') return void sock.destroy();
+        started = true;
+        buf = buf.subarray(i + 1);
+      }
+      while (buf.length >= 4) {
+        const len = buf.readUInt32BE(0);
+        if (len === 0) {
+          const infected = Buffer.concat(parts)
+            .toString('latin1')
+            .includes('EICAR-STANDARD-ANTIVIRUS-TEST-FILE');
+          sock.end(infected ? 'stream: Eicar-Test-Signature FOUND\0' : 'stream: OK\0');
+          return;
+        }
+        if (buf.length < 4 + len) break;
+        parts.push(buf.subarray(4, 4 + len));
+        buf = buf.subarray(4 + len);
+      }
+    });
+  });
+  await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+  const port = (server.address() as { port: number }).port;
+  return {
+    port,
+    setMode: (m: 'ok' | 'down') => (mode = m),
+    close: () => new Promise<void>((r) => server.close(() => r())),
+  };
+}
+
+export function tempStorageDir() {
+  const dir = mkdtempSync(join(tmpdir(), 'assar-storage-'));
+  return { dir, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
+}
+
+/** All files currently stored under `dir` (relative paths). */
+export function storedFiles(dir: string): string[] {
+  const out: string[] = [];
+  const walk = (d: string) => {
+    for (const name of readdirSync(d)) {
+      const p = join(d, name);
+      if (statSync(p).isDirectory()) walk(p);
+      else out.push(p);
+    }
+  };
+  walk(dir);
+  return out;
+}
+
+export const settle = (app: INestApplication) => app.get(ScanService, { strict: false }).idle();
+
+type Actor = { agent: Member['agent']; csrf: string };
+export interface UploadSpec {
+  title?: string;
+  filename?: string;
+  contentType?: string;
+  content?: string | Buffer;
+}
+
+/** Full happy-path upload: request URL, PUT bytes, complete, wait for the scan to settle. */
+export async function uploadDocument(
+  app: INestApplication,
+  who: Actor,
+  matterId: string,
+  spec: UploadSpec = {},
+) {
+  const content = Buffer.isBuffer(spec.content)
+    ? spec.content
+    : Buffer.from(spec.content ?? 'synthetic test document');
+  const created = await post(who, `/v1/matters/${matterId}/documents`, {
+    title: spec.title ?? 'Test Document',
+    filename: spec.filename ?? 'test.txt',
+    contentType: spec.contentType ?? 'text/plain',
+    sizeBytes: content.length,
+  });
+  if (created.status !== 201)
+    throw new Error(`create doc failed: ${created.status} ${JSON.stringify(created.body)}`);
+  const docId = created.body.document.id as string;
+  await putBytes(app, created.body.upload, content);
+  const done = await post(who, `/v1/documents/${docId}/versions/1/complete`, {});
+  if (done.status !== 200)
+    throw new Error(`complete failed: ${done.status} ${JSON.stringify(done.body)}`);
+  await settle(app);
+  return { docId, created: created.body, content };
+}
+
+export function putBytes(
+  app: INestApplication,
+  upload: { url: string; headers: Record<string, string> },
+  bytes: Buffer,
+) {
+  const u = new URL(upload.url);
+  return request(app.getHttpServer())
+    .put(u.pathname + u.search)
+    .set(upload.headers)
+    .send(bytes);
+}

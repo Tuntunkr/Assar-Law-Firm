@@ -9,7 +9,14 @@ const base = {
 
 describe('loadEnv', () => {
   it('applies safe defaults', () => {
-    const env = loadEnv({ ...base, NODE_ENV: 'production' });
+    const env = loadEnv({
+      ...base,
+      NODE_ENV: 'production',
+      STORAGE_DRIVER: 's3',
+      S3_BUCKET: 'b',
+      S3_ACCESS_KEY: 'k',
+      S3_SECRET_KEY: 's',
+    });
     expect(env.cookieSecure).toBe(true);
     expect(env.REGISTRATION_ENABLED).toBe(false);
   });
@@ -20,5 +27,24 @@ describe('loadEnv', () => {
     } catch (e) {
       expect(String(e)).not.toContain('too-short');
     }
+  });
+
+  it('refuses unsafe storage and scanning settings in production', () => {
+    const prod = { ...base, NODE_ENV: 'production' };
+    expect(() => loadEnv({ ...prod, STORAGE_DRIVER: 'local', SCAN_PROVIDER: 'clamav' })).toThrow(
+      /STORAGE_DRIVER/,
+    );
+    const s3 = {
+      ...prod,
+      STORAGE_DRIVER: 's3',
+      S3_BUCKET: 'b',
+      S3_ACCESS_KEY: 'k',
+      S3_SECRET_KEY: 's',
+    };
+    expect(() => loadEnv({ ...s3, SCAN_PROVIDER: 'disabled' })).toThrow(/SCAN_PROVIDER/);
+    expect(() => loadEnv({ ...s3, SCAN_PROVIDER: 'clamav' })).not.toThrow();
+    expect(() => loadEnv({ ...prod, STORAGE_DRIVER: 's3', SCAN_PROVIDER: 'clamav' })).toThrow(
+      /S3_BUCKET/,
+    );
   });
 });

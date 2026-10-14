@@ -437,3 +437,164 @@ const conflictSchema = new Schema<ConflictCheckDoc>(
 );
 conflictSchema.index({ organizationId: 1, _id: -1 });
 export const ConflictCheckModel = define<ConflictCheckDoc>('ConflictCheck', conflictSchema);
+
+// ---- Documents, calendar, tasks ----
+export const DOCUMENT_VERSION_STATUSES = [
+  'pending_upload',
+  'scanning',
+  'clean',
+  'infected',
+  'scan_failed',
+  'skipped',
+] as const;
+export type DocumentVersionStatus = (typeof DOCUMENT_VERSION_STATUSES)[number];
+
+export interface DocumentDoc {
+  _id: Id;
+  organizationId: Id;
+  matterId: Id;
+  title: string;
+  /** Highest version number allocated so far (allocated atomically). */
+  latestVersion: number;
+  status: 'active' | 'deleted';
+  createdBy: Id;
+  deletedAt?: Date | null;
+  deletedBy?: Id | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+const documentSchema = new Schema<DocumentDoc>(
+  {
+    organizationId: { type: Schema.Types.ObjectId, required: true },
+    matterId: { type: Schema.Types.ObjectId, required: true },
+    title: { type: String, required: true, trim: true, maxlength: 250 },
+    latestVersion: { type: Number, default: 0 },
+    status: { type: String, enum: ['active', 'deleted'], default: 'active' },
+    createdBy: { type: Schema.Types.ObjectId, required: true },
+    deletedAt: { type: Date, default: null },
+    deletedBy: { type: Schema.Types.ObjectId, default: null },
+  },
+  { timestamps: true },
+);
+documentSchema.index({ organizationId: 1, matterId: 1, status: 1, _id: -1 });
+export const DocumentModel = define<DocumentDoc>('Document', documentSchema);
+
+export interface DocumentVersionDoc {
+  _id: Id;
+  organizationId: Id;
+  documentId: Id;
+  /** Denormalized so access checks never need a join. */
+  matterId: Id;
+  version: number;
+  filename: string;
+  contentType: string;
+  sizeBytes: number;
+  /** Object key in private storage. Never returned by the API; file bytes are never stored in MongoDB. */
+  storageKey: string;
+  status: DocumentVersionStatus;
+  scan?: { engine: string; result?: string; scannedAt: Date } | null;
+  uploadedBy: Id;
+  completedAt?: Date | null;
+  createdAt: Date;
+}
+const versionSchema = new Schema<DocumentVersionDoc>(
+  {
+    organizationId: { type: Schema.Types.ObjectId, required: true },
+    documentId: { type: Schema.Types.ObjectId, required: true },
+    matterId: { type: Schema.Types.ObjectId, required: true },
+    version: { type: Number, required: true },
+    filename: { type: String, required: true, maxlength: 255 },
+    contentType: { type: String, required: true, maxlength: 150 },
+    sizeBytes: { type: Number, required: true, min: 1 },
+    storageKey: { type: String, required: true },
+    status: { type: String, enum: DOCUMENT_VERSION_STATUSES, required: true },
+    scan: {
+      type: new Schema({ engine: String, result: String, scannedAt: Date }, { _id: false }),
+      default: null,
+    },
+    uploadedBy: { type: Schema.Types.ObjectId, required: true },
+    completedAt: { type: Date, default: null },
+  },
+  { timestamps: { createdAt: true, updatedAt: false } },
+);
+versionSchema.index({ organizationId: 1, documentId: 1, version: 1 }, { unique: true });
+versionSchema.index({ organizationId: 1, status: 1, createdAt: 1 });
+export const DocumentVersionModel = define<DocumentVersionDoc>('DocumentVersion', versionSchema);
+
+export const EVENT_KINDS = ['hearing', 'deadline', 'meeting', 'reminder', 'other'] as const;
+export interface CalendarEventDoc {
+  _id: Id;
+  organizationId: Id;
+  matterId?: Id | null;
+  kind: (typeof EVENT_KINDS)[number];
+  title: string;
+  description?: string;
+  startsAt: Date;
+  endsAt?: Date | null;
+  allDay: boolean;
+  location?: string;
+  attendeeIds: Id[];
+  status: 'scheduled' | 'completed' | 'cancelled';
+  /** Deadlines are only ever entered by people (or confirmed from AI suggestions in a later phase). */
+  source: 'manual';
+  createdBy: Id;
+  createdAt: Date;
+  updatedAt: Date;
+}
+const eventSchema = new Schema<CalendarEventDoc>(
+  {
+    organizationId: { type: Schema.Types.ObjectId, required: true },
+    matterId: { type: Schema.Types.ObjectId, default: null },
+    kind: { type: String, enum: EVENT_KINDS, required: true },
+    title: { type: String, required: true, trim: true, maxlength: 200 },
+    description: { type: String, maxlength: 5000 },
+    startsAt: { type: Date, required: true },
+    endsAt: { type: Date, default: null },
+    allDay: { type: Boolean, default: false },
+    location: { type: String, maxlength: 300 },
+    attendeeIds: { type: [Schema.Types.ObjectId], default: [] },
+    status: { type: String, enum: ['scheduled', 'completed', 'cancelled'], default: 'scheduled' },
+    source: { type: String, enum: ['manual'], default: 'manual' },
+    createdBy: { type: Schema.Types.ObjectId, required: true },
+  },
+  { timestamps: true },
+);
+eventSchema.index({ organizationId: 1, startsAt: 1, _id: 1 });
+eventSchema.index({ organizationId: 1, matterId: 1, startsAt: 1 });
+eventSchema.index({ organizationId: 1, kind: 1, startsAt: 1 });
+export const CalendarEventModel = define<CalendarEventDoc>('CalendarEvent', eventSchema);
+
+export interface TaskDoc {
+  _id: Id;
+  organizationId: Id;
+  matterId?: Id | null;
+  title: string;
+  description?: string;
+  status: 'todo' | 'in_progress' | 'done' | 'cancelled';
+  priority: 'low' | 'normal' | 'high';
+  assigneeId?: Id | null;
+  dueAt?: Date | null;
+  completedAt?: Date | null;
+  createdBy: Id;
+  createdAt: Date;
+  updatedAt: Date;
+}
+const taskSchema = new Schema<TaskDoc>(
+  {
+    organizationId: { type: Schema.Types.ObjectId, required: true },
+    matterId: { type: Schema.Types.ObjectId, default: null },
+    title: { type: String, required: true, trim: true, maxlength: 200 },
+    description: { type: String, maxlength: 5000 },
+    status: { type: String, enum: ['todo', 'in_progress', 'done', 'cancelled'], default: 'todo' },
+    priority: { type: String, enum: ['low', 'normal', 'high'], default: 'normal' },
+    assigneeId: { type: Schema.Types.ObjectId, default: null },
+    dueAt: { type: Date, default: null },
+    completedAt: { type: Date, default: null },
+    createdBy: { type: Schema.Types.ObjectId, required: true },
+  },
+  { timestamps: true },
+);
+taskSchema.index({ organizationId: 1, _id: -1 });
+taskSchema.index({ organizationId: 1, assigneeId: 1, status: 1, _id: -1 });
+taskSchema.index({ organizationId: 1, matterId: 1, _id: -1 });
+export const TaskModel = define<TaskDoc>('Task', taskSchema);

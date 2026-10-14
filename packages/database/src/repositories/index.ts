@@ -135,3 +135,4 @@ export class InvalidCursorError extends Error {
   }
 }
 export * from './crm.js';
+export * from './work.js';
