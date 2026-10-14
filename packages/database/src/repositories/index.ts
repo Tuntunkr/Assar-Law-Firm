@@ -40,6 +40,8 @@ export const memberships = {
   findActiveForUser: (userId: Id) => MembershipModel.findOne({ userId, status: 'active' }).lean(),
   /** All queries below require organizationId — never query memberships without it. */
   find: (organizationId: Id, userId: Id) => MembershipModel.findOne({ organizationId, userId }),
+  countActive: (organizationId: Id, userIds: Id[]) =>
+    MembershipModel.countDocuments({ organizationId, userId: { $in: userIds }, status: 'active' }),
   countActiveWithRole: (organizationId: Id, role: Role) =>
     MembershipModel.countDocuments({ organizationId, role, status: 'active' }),
   async listPage(organizationId: Id, limit: number, cursor?: string) {
@@ -132,3 +134,4 @@ export class InvalidCursorError extends Error {
     super('Invalid pagination cursor');
   }
 }
+export * from './crm.js';

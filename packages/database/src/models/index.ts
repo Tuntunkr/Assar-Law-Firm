@@ -242,3 +242,198 @@ const idemSchema = new Schema<IdempotencyKeyDoc>({
 idemSchema.index({ organizationId: 1, key: 1 }, { unique: true });
 idemSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 export const IdempotencyKeyModel = define<IdempotencyKeyDoc>('IdempotencyKey', idemSchema);
+
+// ---- Clients, matters, parties, teams ----
+const searchable = {
+  normalizedName: { type: String, required: true },
+  tokens: { type: [String], default: [] },
+};
+
+export interface ClientDoc {
+  _id: Id;
+  organizationId: Id;
+  type: 'individual' | 'organization';
+  name: string;
+  normalizedName: string;
+  tokens: string[];
+  email?: string;
+  phone?: string;
+  address?: string;
+  status: 'active' | 'archived';
+  createdBy: Id;
+  createdAt: Date;
+  updatedAt: Date;
+}
+const clientSchema = new Schema<ClientDoc>(
+  {
+    organizationId: { type: Schema.Types.ObjectId, required: true },
+    type: { type: String, enum: ['individual', 'organization'], required: true },
+    name: { type: String, required: true, trim: true, maxlength: 200 },
+    ...searchable,
+    email: { type: String, lowercase: true, trim: true, maxlength: 254 },
+    phone: { type: String, maxlength: 40 },
+    address: { type: String, maxlength: 500 },
+    status: { type: String, enum: ['active', 'archived'], default: 'active' },
+    createdBy: { type: Schema.Types.ObjectId, required: true },
+  },
+  { timestamps: true },
+);
+clientSchema.index({ organizationId: 1, _id: -1 });
+clientSchema.index({ organizationId: 1, status: 1, _id: -1 });
+clientSchema.index({ organizationId: 1, normalizedName: 1 });
+clientSchema.index({ organizationId: 1, tokens: 1 });
+export const ClientModel = define<ClientDoc>('Client', clientSchema);
+
+export interface TeamDoc {
+  _id: Id;
+  organizationId: Id;
+  name: string;
+  normalizedName: string;
+  description?: string;
+  userIds: Id[];
+  createdBy: Id;
+  createdAt: Date;
+  updatedAt: Date;
+}
+const teamSchema = new Schema<TeamDoc>(
+  {
+    organizationId: { type: Schema.Types.ObjectId, required: true },
+    name: { type: String, required: true, trim: true, maxlength: 100 },
+    normalizedName: { type: String, required: true },
+    description: { type: String, maxlength: 500 },
+    userIds: { type: [Schema.Types.ObjectId], default: [] },
+    createdBy: { type: Schema.Types.ObjectId, required: true },
+  },
+  { timestamps: true },
+);
+teamSchema.index({ organizationId: 1, normalizedName: 1 }, { unique: true });
+export const TeamModel = define<TeamDoc>('Team', teamSchema);
+
+export interface MatterDoc {
+  _id: Id;
+  organizationId: Id;
+  clientId: Id;
+  matterNumber: string;
+  title: string;
+  titleLower: string;
+  practiceArea: string;
+  description?: string;
+  status: 'open' | 'pending' | 'closed' | 'archived';
+  /** Restricted matters are visible only to users in matter_access (plus the owner, audited). */
+  restricted: boolean;
+  leadAttorneyId?: Id | null;
+  teamIds: Id[];
+  openedAt: Date;
+  closedAt?: Date | null;
+  createdBy: Id;
+  createdAt: Date;
+  updatedAt: Date;
+}
+const matterSchema = new Schema<MatterDoc>(
+  {
+    organizationId: { type: Schema.Types.ObjectId, required: true },
+    clientId: { type: Schema.Types.ObjectId, required: true },
+    matterNumber: { type: String, required: true },
+    title: { type: String, required: true, trim: true, maxlength: 200 },
+    titleLower: { type: String, required: true },
+    practiceArea: { type: String, required: true },
+    description: { type: String, maxlength: 5000 },
+    status: { type: String, enum: ['open', 'pending', 'closed', 'archived'], default: 'open' },
+    restricted: { type: Boolean, default: false },
+    leadAttorneyId: { type: Schema.Types.ObjectId, default: null },
+    teamIds: { type: [Schema.Types.ObjectId], default: [] },
+    openedAt: { type: Date, required: true },
+    closedAt: { type: Date, default: null },
+    createdBy: { type: Schema.Types.ObjectId, required: true },
+  },
+  { timestamps: true },
+);
+matterSchema.index({ organizationId: 1, matterNumber: 1 }, { unique: true });
+matterSchema.index({ organizationId: 1, _id: -1 });
+matterSchema.index({ organizationId: 1, status: 1, _id: -1 });
+matterSchema.index({ organizationId: 1, clientId: 1, _id: -1 });
+matterSchema.index({ organizationId: 1, titleLower: 1 });
+export const MatterModel = define<MatterDoc>('Matter', matterSchema);
+
+export interface MatterAccessDoc {
+  _id: Id;
+  organizationId: Id;
+  matterId: Id;
+  userId: Id;
+  grantedBy: Id;
+  createdAt: Date;
+}
+const matterAccessSchema = new Schema<MatterAccessDoc>(
+  {
+    organizationId: { type: Schema.Types.ObjectId, required: true },
+    matterId: { type: Schema.Types.ObjectId, required: true },
+    userId: { type: Schema.Types.ObjectId, required: true },
+    grantedBy: { type: Schema.Types.ObjectId, required: true },
+  },
+  { timestamps: { createdAt: true, updatedAt: false } },
+);
+matterAccessSchema.index({ organizationId: 1, matterId: 1, userId: 1 }, { unique: true });
+matterAccessSchema.index({ organizationId: 1, userId: 1 });
+export const MatterAccessModel = define<MatterAccessDoc>('MatterAccess', matterAccessSchema);
+
+export interface PartyDoc {
+  _id: Id;
+  organizationId: Id;
+  matterId: Id;
+  name: string;
+  normalizedName: string;
+  tokens: string[];
+  type: 'individual' | 'organization';
+  role: string;
+  email?: string;
+  phone?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+const partySchema = new Schema<PartyDoc>(
+  {
+    organizationId: { type: Schema.Types.ObjectId, required: true },
+    matterId: { type: Schema.Types.ObjectId, required: true },
+    name: { type: String, required: true, trim: true, maxlength: 200 },
+    ...searchable,
+    type: { type: String, enum: ['individual', 'organization'], required: true },
+    role: { type: String, required: true },
+    email: { type: String, lowercase: true, trim: true, maxlength: 254 },
+    phone: { type: String, maxlength: 40 },
+  },
+  { timestamps: true },
+);
+partySchema.index({ organizationId: 1, matterId: 1, _id: -1 });
+partySchema.index({ organizationId: 1, tokens: 1 });
+export const PartyModel = define<PartyDoc>('Party', partySchema);
+
+export interface CounterDoc {
+  _id: string;
+  seq: number;
+}
+export const CounterModel = define<CounterDoc>(
+  'Counter',
+  new Schema<CounterDoc>({ _id: { type: String }, seq: { type: Number, default: 0 } }),
+);
+
+export interface ConflictCheckDoc {
+  _id: Id;
+  organizationId: Id;
+  requestedBy: Id;
+  names: string[];
+  matchCount: number;
+  includesRestricted: boolean;
+  createdAt: Date;
+}
+const conflictSchema = new Schema<ConflictCheckDoc>(
+  {
+    organizationId: { type: Schema.Types.ObjectId, required: true },
+    requestedBy: { type: Schema.Types.ObjectId, required: true },
+    names: { type: [String], required: true },
+    matchCount: { type: Number, required: true },
+    includesRestricted: { type: Boolean, required: true },
+  },
+  { timestamps: { createdAt: true, updatedAt: false } },
+);
+conflictSchema.index({ organizationId: 1, _id: -1 });
+export const ConflictCheckModel = define<ConflictCheckDoc>('ConflictCheck', conflictSchema);

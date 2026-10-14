@@ -86,3 +86,81 @@ export async function login(
     .send({ email, password, ...(mfaCode ? { mfaCode } : {}) });
   return { agent, res, csrf: res.body?.csrfToken as string };
 }
+
+export type Owner = Awaited<ReturnType<typeof registerWithMfa>>;
+export interface Member {
+  agent: ReturnType<typeof request.agent>;
+  csrf: string;
+  email: string;
+  userId: string;
+  role: string;
+}
+
+let keyCounter = 0;
+export const idemKey = () => `test-key-${Date.now()}-${keyCounter++}-padding`;
+
+/** Invites a user with `role`, accepts the invitation, logs in (and enrolls MFA for roles that require it). */
+export async function addMember(
+  app: INestApplication,
+  owner: Owner,
+  role: string,
+): Promise<Member> {
+  const email = uniqueEmail(role);
+  const inv = await owner.agent
+    .post('/v1/organization/invitations')
+    .set('x-csrf-token', owner.csrf)
+    .set('idempotency-key', idemKey())
+    .send({ email, role });
+  if (inv.status !== 201)
+    throw new Error(`invite failed: ${inv.status} ${JSON.stringify(inv.body)}`);
+  const accept = await request(app.getHttpServer())
+    .post('/v1/auth/accept-invitation')
+    .send({ token: inv.body.token, name: `Test ${role}`, password: PASSWORD });
+  if (accept.status !== 201) throw new Error(`accept failed: ${accept.status}`);
+  const { agent, res, csrf } = await login(app, email);
+  if (res.status !== 200) throw new Error(`login failed: ${res.status}`);
+  if (res.body.mfa.enrollmentRequired) {
+    const setup = await agent.post('/v1/auth/mfa/setup').set('x-csrf-token', csrf);
+    await agent
+      .post('/v1/auth/mfa/enable')
+      .set('x-csrf-token', csrf)
+      .send({ code: totp.generate(setup.body.secret) })
+      .expect(200);
+  }
+  return { agent, csrf, email, userId: res.body.user.id as string, role };
+}
+
+export const post = (m: { agent: Member['agent']; csrf: string }, url: string, body: object) =>
+  m.agent.post(url).set('x-csrf-token', m.csrf).send(body);
+export const patch = (m: { agent: Member['agent']; csrf: string }, url: string, body: object) =>
+  m.agent.patch(url).set('x-csrf-token', m.csrf).send(body);
+export const put = (m: { agent: Member['agent']; csrf: string }, url: string, body: object) =>
+  m.agent.put(url).set('x-csrf-token', m.csrf).send(body);
+export const del = (m: { agent: Member['agent']; csrf: string }, url: string) =>
+  m.agent.delete(url).set('x-csrf-token', m.csrf);
+
+export async function newClient(
+  m: { agent: Member['agent']; csrf: string },
+  name = 'Acme Holdings LLC',
+) {
+  const res = await post(m, '/v1/clients', { type: 'organization', name });
+  if (res.status !== 201)
+    throw new Error(`client failed: ${res.status} ${JSON.stringify(res.body)}`);
+  return res.body.id as string;
+}
+
+export async function newMatter(
+  m: { agent: Member['agent']; csrf: string },
+  clientId: string,
+  extra: object = {},
+) {
+  const res = await post(m, '/v1/matters', {
+    clientId,
+    title: 'Sample Matter',
+    practiceArea: 'litigation',
+    ...extra,
+  });
+  if (res.status !== 201)
+    throw new Error(`matter failed: ${res.status} ${JSON.stringify(res.body)}`);
+  return res.body as { id: string; matterNumber: string };
+}

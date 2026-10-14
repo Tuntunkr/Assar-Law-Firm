@@ -12,8 +12,9 @@ export const Public = () => SetMetadata(IS_PUBLIC, true);
 /** Route stays reachable while MFA enrollment is still pending. */
 export const AllowMfaEnrollment = () => SetMetadata(ALLOW_MFA_ENROLLMENT, true);
 export const RequirePermissions = (...p: Permission[]) => SetMetadata(PERMISSIONS_KEY, p);
-/** Requires an `Idempotency-Key` header; `redact` fields are not persisted in the replay record. */
-export const Idempotent = (opts: { redact?: string[] } = {}) => SetMetadata(IDEMPOTENT_KEY, opts);
+/** Requires an `Idempotency-Key` header (unless `optional`: then keyless requests simply run normally); `redact` fields are not persisted in the replay record. */
+export const Idempotent = (opts: { redact?: string[]; optional?: boolean } = {}) =>
+  SetMetadata(IDEMPOTENT_KEY, opts);
 
 export const Auth = createParamDecorator((_: unknown, ctx: ExecutionContext) => {
   const req = ctx.switchToHttp().getRequest<AppRequest>();

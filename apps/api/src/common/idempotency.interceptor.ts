@@ -17,7 +17,7 @@ export class IdempotencyInterceptor implements NestInterceptor {
   constructor(private readonly reflector: Reflector) {}
 
   async intercept(ctx: ExecutionContext, next: CallHandler): Promise<Observable<unknown>> {
-    const opts = this.reflector.get<{ redact?: string[] } | undefined>(
+    const opts = this.reflector.get<{ redact?: string[]; optional?: boolean } | undefined>(
       IDEMPOTENT_KEY,
       ctx.getHandler(),
     );
@@ -29,6 +29,7 @@ export class IdempotencyInterceptor implements NestInterceptor {
     const orgId = req.auth?.organizationId;
     const key = req.header('idempotency-key');
     if (!orgId) throw new ApiError(401, 'UNAUTHENTICATED', 'Authentication required');
+    if (!key && opts.optional) return next.handle();
     if (!key || !/^[\w-]{8,128}$/.test(key)) {
       throw new ApiError(
         400,

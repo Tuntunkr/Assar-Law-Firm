@@ -11,6 +11,7 @@ export const PERMISSIONS = [
   'client:write',
   'matter:read',
   'matter:write',
+  'conflict:check',
   'document:read',
   'document:write',
   'task:write',
@@ -80,6 +81,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'client:write',
     'matter:read',
     'matter:write',
+    'conflict:check',
     'document:read',
     'document:write',
     'task:write',
@@ -92,6 +94,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'client:write',
     'matter:read',
     'matter:write',
+    'conflict:check',
     'document:read',
     'document:write',
     'task:write',
@@ -109,3 +112,36 @@ export function hasPermission(role: Role, permission: Permission): boolean {
 export function roleRequiresMfa(role: Role): boolean {
   return MFA_REQUIRED_ROLES.includes(role);
 }
+
+export const CLIENT_TYPES = ['individual', 'organization'] as const;
+export type ClientType = (typeof CLIENT_TYPES)[number];
+
+export const PRACTICE_AREAS = [
+  'litigation',
+  'corporate',
+  'family',
+  'real_estate',
+  'employment',
+  'intellectual_property',
+  'criminal',
+  'immigration',
+  'tax',
+  'other',
+] as const;
+export type PracticeArea = (typeof PRACTICE_AREAS)[number];
+
+export const MATTER_STATUSES = ['open', 'pending', 'closed', 'archived'] as const;
+export type MatterStatus = (typeof MATTER_STATUSES)[number];
+
+export const PARTY_ROLES = [
+  'client',
+  'opposing_party',
+  'opposing_counsel',
+  'co_party',
+  'witness',
+  'expert',
+  'other',
+] as const;
+export type PartyRole = (typeof PARTY_ROLES)[number];
+
+export type ConflictMatchType = 'exact' | 'similar';
