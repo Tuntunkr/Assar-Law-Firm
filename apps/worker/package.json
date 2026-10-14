@@ -1,0 +1,28 @@
+{
+  "name": "@assar/worker",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsx watch src/main.ts",
+    "start": "node dist/main.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint --config ../../eslint.config.mjs src test",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@assar/database": "workspace:*",
+    "@assar/jobs": "workspace:*",
+    "@assar/storage": "workspace:*",
+    "pino": "^10.4.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@assar/config": "workspace:*",
+    "@types/node": "^26.6.5",
+    "mongoose": "^9.11.2",
+    "tsx": "^4.23.15",
+    "vitest": "^5.0.4"
+  }
+}

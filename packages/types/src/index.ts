@@ -36,6 +36,7 @@ export type ErrorCode =
   | 'MFA_REQUIRED'
   | 'MFA_ENROLLMENT_REQUIRED'
   | 'ACCOUNT_LOCKED'
+  | 'SERVICE_UNAVAILABLE'
   | 'INTERNAL';
 
 export interface ApiErrorBody {

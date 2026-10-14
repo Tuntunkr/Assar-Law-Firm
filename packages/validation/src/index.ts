@@ -27,13 +27,6 @@ export const demoRequestSchema = z.object({
 });
 export type DemoRequest = z.infer<typeof demoRequestSchema>;
 
-export const createAiJobSchema = z.object({
-  task: z.enum(AI_TASKS),
-  matterId: z.string().min(1),
-  documentIds: z.array(z.string().min(1)).max(20).default([]),
-  instructions: z.string().trim().max(4000).optional(),
-});
-
 // ---- Auth & organization ----
 export const registerSchema = z.object({
   organizationName: z.string().trim().min(2).max(150),
@@ -270,3 +263,51 @@ export const taskListQuerySchema = paginationSchema.extend({
   matterId: objectIdSchema.optional(),
   dueBefore: isoDate.optional(),
 });
+
+// ---- AI ----
+export const createAiJobSchema = z
+  .object({
+    task: z.enum(AI_TASKS),
+    matterId: objectIdSchema,
+    /** Source documents. Omit `version` to use the latest scanned (clean) version. */
+    documents: z
+      .array(
+        z.object({ documentId: objectIdSchema, version: z.number().int().positive().optional() }),
+      )
+      .min(1, 'Select at least one source document')
+      .max(10),
+    /** The question (document_qa) or drafting brief (drafting); optional guidance otherwise. */
+    instructions: z.string().trim().min(3).max(4000).optional(),
+  })
+  .superRefine((v, ctx) => {
+    if ((v.task === 'document_qa' || v.task === 'drafting') && !v.instructions) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['instructions'],
+        message:
+          v.task === 'document_qa' ? 'Enter the question to answer' : 'Enter a drafting brief',
+      });
+    }
+    const ids = v.documents.map((d) => `${d.documentId}:${d.version ?? ''}`);
+    if (new Set(ids).size !== ids.length) {
+      ctx.addIssue({ code: 'custom', path: ['documents'], message: 'Duplicate documents' });
+    }
+  });
+
+export const aiJobListQuerySchema = paginationSchema.extend({
+  matterId: objectIdSchema.optional(),
+  status: z.enum(['queued', 'processing', 'succeeded', 'failed', 'cancelled']).optional(),
+  task: z.enum(AI_TASKS).optional(),
+});
+export const aiOutputListQuerySchema = paginationSchema.extend({
+  matterId: objectIdSchema.optional(),
+  reviewStatus: z.enum(['draft', 'approved', 'rejected']).optional(),
+  task: z.enum(AI_TASKS).optional(),
+});
+export const approveAiOutputSchema = z.object({
+  note: z.string().trim().max(2000).optional(),
+  /** Required when the output has unverified items or unsupported authorities. */
+  acknowledgeUnverified: z.boolean().default(false),
+});
+export const rejectAiOutputSchema = z.object({ reason: z.string().trim().min(3).max(2000) });
+export const editAiOutputSchema = z.object({ text: z.string().trim().min(1).max(100_000) });

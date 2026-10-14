@@ -1,8 +1,6 @@
 import { connect } from 'node:net';
 import type { Readable } from 'node:stream';
 
-export const SCAN_PROVIDER = Symbol('SCAN_PROVIDER');
-
 export type ScanOutcome =
   | { status: 'clean'; engine: string }
   | { status: 'infected'; engine: string; signature: string }

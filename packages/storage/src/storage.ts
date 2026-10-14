@@ -1,7 +1,5 @@
 import type { Readable } from 'node:stream';
 
-export const STORAGE = Symbol('STORAGE');
-
 export interface SignedRequest {
   url: string;
   method: 'PUT' | 'GET';

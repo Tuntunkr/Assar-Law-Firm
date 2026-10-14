@@ -4,12 +4,12 @@ import type { Request, Response } from 'express';
 import { Public } from '../common/decorators';
 import { ApiError } from '../common/exception.filter';
 import {
-  contentDisposition,
-  STORAGE,
+  LocalStorage,
   UPLOAD_CONTENT_TYPE,
+  contentDisposition,
   type StorageService,
-} from './storage.service';
-import { LocalStorage } from './local.storage';
+} from '@assar/storage';
+import { STORAGE } from './storage.token';
 
 /**
  * Serves signed URLs for the local development driver only. Authentication is the HMAC signature;

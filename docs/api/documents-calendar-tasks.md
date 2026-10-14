@@ -25,7 +25,8 @@ Conventions are in `auth-and-organizations.md`. Everything is organization-scope
 
 ### Scanning
 
-`ScanService.dispatch()` is the hook. `ClamAvScanProvider` streams the object to clamd (`INSTREAM`). `SCAN_PROVIDER=disabled` (development only) marks versions `skipped`, which is never reported as clean and is refused in production. Today the hook runs in-process after the response; Phase 6 will run the same entry point on the job queue. Until then a crash mid-scan leaves the version in `scanning`, recoverable with `rescan` after 10 minutes.
+Completing an upload moves the version to `scanning` and enqueues a job (`@assar/jobs`); **apps/worker** streams the object to ClamAV (`INSTREAM`) and records the result. Transient failures (e.g. clamd restarting) are retried with exponential backoff and the version stays `scanning`, a real state, until the last attempt, after which it becomes `scan_failed` (retry with `rescan`). A job lost by a crashed worker is recovered by the queue; `rescan` also accepts a version stuck in `scanning` for more than 10 minutes. If Redis is unreachable at completion time the version is rolled back to its previous status and the API returns 503, so nothing is left `scanning` with no job.
+`SCAN_PROVIDER=disabled` (development only, set on the **worker**) marks versions `skipped`, which is never reported as clean and is refused in production.
 
 ### Permissions
 
@@ -37,7 +38,7 @@ Conventions are in `auth-and-organizations.md`. Everything is organization-scope
 - `GET ?from=&to=` is **required**, at most 366 days, half-open `[from, to)`, ordered by start time with a stable cursor. Filters: `kind` (hearing, deadline, meeting, reminder, other), `matterId`.
 - Events may link to a matter. Events on restricted matters are excluded from lists for users without access; org-level events (no matter) are visible to every member who can read matters.
 - Attendees must be active members and, for restricted matters, able to see the matter.
-- **Deadlines are never computed or invented**: every event is `source: "manual"`. AI-suggested dates (Phase 6) will need explicit human confirmation.
+- **Deadlines are never computed or invented**: every event is `source: "manual"`. Dates the AI extracts appear only as reviewable items in an AI output; they are never created as calendar events automatically.
 
 ## Tasks (`/tasks`)
 
@@ -49,4 +50,4 @@ Conventions are in `auth-and-organizations.md`. Everything is organization-scope
 
 - No org-wide document search/list (documents are listed per matter) so restricted matters can't leak through a cross-matter query.
 - S3 behaviour (actual PUT/GET against a bucket) has not been exercised in this environment: only URL signing is tested. The local driver and the ClamAV client are tested end to end (the latter against a protocol-level fake clamd).
-- Abandoned `pending_upload` versions are not cleaned up yet (worker job, Phase 6).
+- Abandoned `pending_upload` versions are not cleaned up yet (a scheduled cleanup job is still to do).

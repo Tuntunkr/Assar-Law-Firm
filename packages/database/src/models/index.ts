@@ -598,3 +598,134 @@ taskSchema.index({ organizationId: 1, _id: -1 });
 taskSchema.index({ organizationId: 1, assigneeId: 1, status: 1, _id: -1 });
 taskSchema.index({ organizationId: 1, matterId: 1, _id: -1 });
 export const TaskModel = define<TaskDoc>('Task', taskSchema);
+
+// ---- AI jobs & outputs ----
+export const AI_JOB_STATUSES = [
+  'queued',
+  'processing',
+  'succeeded',
+  'failed',
+  'cancelled',
+] as const;
+export type AiJobStatus = (typeof AI_JOB_STATUSES)[number];
+export const AI_STAGES = ['extracting_text', 'generating', 'saving'] as const;
+
+export interface AiJobDoc {
+  _id: Id;
+  organizationId: Id;
+  matterId: Id;
+  requestedBy: Id;
+  task: string;
+  /** Pinned source versions. */
+  documents: { documentId: Id; version: number }[];
+  instructions?: string;
+  /** Written only by the worker/API as work really happens; never an estimate. */
+  status: AiJobStatus;
+  stage?: (typeof AI_STAGES)[number] | null;
+  /** Attempts actually started. */
+  attempts: number;
+  maxAttempts: number;
+  /** Incremented on each manual retry so queue job ids stay unique. */
+  runNumber: number;
+  cancelRequested: boolean;
+  /** Last failure (kept while retrying so the UI can show why). Messages never contain document text. */
+  error?: { code: string; message: string; retryable: boolean } | null;
+  model?: string | null;
+  usage?: { promptTokens: number; completionTokens: number } | null;
+  outputId?: Id | null;
+  startedAt?: Date | null;
+  finishedAt?: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+const aiJobSchema = new Schema<AiJobDoc>(
+  {
+    organizationId: { type: Schema.Types.ObjectId, required: true },
+    matterId: { type: Schema.Types.ObjectId, required: true },
+    requestedBy: { type: Schema.Types.ObjectId, required: true },
+    task: { type: String, required: true },
+    documents: {
+      type: [new Schema({ documentId: Schema.Types.ObjectId, version: Number }, { _id: false })],
+      default: [],
+    },
+    instructions: { type: String, maxlength: 4000 },
+    status: { type: String, enum: AI_JOB_STATUSES, default: 'queued' },
+    stage: { type: String, enum: [...AI_STAGES, null], default: null },
+    attempts: { type: Number, default: 0 },
+    maxAttempts: { type: Number, default: 3 },
+    runNumber: { type: Number, default: 1 },
+    cancelRequested: { type: Boolean, default: false },
+    error: {
+      type: new Schema({ code: String, message: String, retryable: Boolean }, { _id: false }),
+      default: null,
+    },
+    model: { type: String, default: null },
+    usage: {
+      type: new Schema({ promptTokens: Number, completionTokens: Number }, { _id: false }),
+      default: null,
+    },
+    outputId: { type: Schema.Types.ObjectId, default: null },
+    startedAt: { type: Date, default: null },
+    finishedAt: { type: Date, default: null },
+  },
+  { timestamps: true },
+);
+aiJobSchema.index({ organizationId: 1, _id: -1 });
+aiJobSchema.index({ organizationId: 1, status: 1, _id: -1 });
+aiJobSchema.index({ organizationId: 1, matterId: 1, _id: -1 });
+export const AiJobModel = define<AiJobDoc>('AiJob', aiJobSchema);
+
+export interface AiSourceRef {
+  sourceId: string;
+  documentId: Id;
+  version: number;
+  filename: string;
+  title: string;
+  chars: number;
+  truncated: boolean;
+}
+export interface AiOutputDoc {
+  _id: Id;
+  organizationId: Id;
+  matterId: Id;
+  jobId: Id;
+  task: string;
+  requestedBy: Id;
+  /** Structured, server-verified model output. Always AI-generated and unverified until reviewed. */
+  result: Record<string, unknown>;
+  sources: AiSourceRef[];
+  reviewStatus: 'draft' | 'approved' | 'rejected';
+  reviewedBy?: Id | null;
+  reviewedAt?: Date | null;
+  reviewNote?: string | null;
+  /** Reviewer's own edit of the text, kept separate from the model's original. */
+  editedText?: string | null;
+  editedBy?: Id | null;
+  editedAt?: Date | null;
+  model: string;
+  createdAt: Date;
+}
+const aiOutputSchema = new Schema<AiOutputDoc>(
+  {
+    organizationId: { type: Schema.Types.ObjectId, required: true },
+    matterId: { type: Schema.Types.ObjectId, required: true },
+    jobId: { type: Schema.Types.ObjectId, required: true },
+    task: { type: String, required: true },
+    requestedBy: { type: Schema.Types.ObjectId, required: true },
+    result: { type: Schema.Types.Mixed, required: true },
+    sources: { type: Schema.Types.Mixed, default: [] },
+    reviewStatus: { type: String, enum: ['draft', 'approved', 'rejected'], default: 'draft' },
+    reviewedBy: { type: Schema.Types.ObjectId, default: null },
+    reviewedAt: { type: Date, default: null },
+    reviewNote: { type: String, maxlength: 2000, default: null },
+    editedText: { type: String, maxlength: 100_000, default: null },
+    editedBy: { type: Schema.Types.ObjectId, default: null },
+    editedAt: { type: Date, default: null },
+    model: { type: String, required: true },
+  },
+  { timestamps: { createdAt: true, updatedAt: false } },
+);
+aiOutputSchema.index({ organizationId: 1, jobId: 1 }, { unique: true });
+aiOutputSchema.index({ organizationId: 1, matterId: 1, _id: -1 });
+aiOutputSchema.index({ organizationId: 1, reviewStatus: 1, _id: -1 });
+export const AiOutputModel = define<AiOutputDoc>('AiOutput', aiOutputSchema);

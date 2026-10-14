@@ -7,36 +7,34 @@ import {
   S3Client,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-import type { Env } from '../config/env';
 import {
   UPLOAD_CONTENT_TYPE,
   contentDisposition,
   type SignedRequest,
   type StorageService,
-} from './storage.service';
+} from './storage.js';
+
+export interface S3StorageOptions {
+  bucket: string;
+  region: string;
+  accessKey: string;
+  secretKey: string;
+  endpoint?: string;
+  forcePathStyle?: boolean;
+}
 
 /** S3-compatible storage (AWS S3, MinIO, ...). The bucket must be private. */
 export class S3Storage implements StorageService {
   private readonly client: S3Client;
   private readonly bucket: string;
 
-  constructor(
-    env: Pick<
-      Env,
-      | 'S3_ENDPOINT'
-      | 'S3_REGION'
-      | 'S3_BUCKET'
-      | 'S3_ACCESS_KEY'
-      | 'S3_SECRET_KEY'
-      | 'S3_FORCE_PATH_STYLE'
-    >,
-  ) {
-    this.bucket = env.S3_BUCKET!;
+  constructor(options: S3StorageOptions) {
+    this.bucket = options.bucket;
     this.client = new S3Client({
-      region: env.S3_REGION,
-      endpoint: env.S3_ENDPOINT,
-      forcePathStyle: env.S3_FORCE_PATH_STYLE,
-      credentials: { accessKeyId: env.S3_ACCESS_KEY!, secretAccessKey: env.S3_SECRET_KEY! },
+      region: options.region,
+      endpoint: options.endpoint,
+      forcePathStyle: options.forcePathStyle ?? false,
+      credentials: { accessKeyId: options.accessKey, secretAccessKey: options.secretKey },
     });
   }
 
@@ -86,11 +84,8 @@ export class S3Storage implements StorageService {
       const res = await this.client.send(new HeadObjectCommand({ Bucket: this.bucket, Key: key }));
       return { sizeBytes: res.ContentLength ?? 0 };
     } catch (e) {
-      if (
-        (e as { name?: string }).name === 'NotFound' ||
-        (e as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode === 404
-      )
-        return null;
+      const err = e as { name?: string; $metadata?: { httpStatusCode?: number } };
+      if (err.name === 'NotFound' || err.$metadata?.httpStatusCode === 404) return null;
       throw e;
     }
   }

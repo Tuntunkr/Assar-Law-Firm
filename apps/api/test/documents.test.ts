@@ -7,6 +7,7 @@ import {
   addMember,
   bootApp,
   del,
+  envOf,
   newClient,
   newMatter,
   patch,
@@ -15,15 +16,18 @@ import {
   registerWithMfa,
   settle,
   startFakeClamd,
+  startTestWorkers,
   storedFiles,
   tempStorageDir,
   uploadDocument,
   putBytes,
   type Owner,
+  type TestWorkers,
 } from './helpers';
 
 let app: INestApplication;
 let clamd: Awaited<ReturnType<typeof startFakeClamd>>;
+let workers: TestWorkers;
 const storage = tempStorageDir();
 
 beforeAll(async () => {
@@ -37,8 +41,10 @@ beforeAll(async () => {
     CLAMAV_PORT: String(clamd.port),
     MAX_UPLOAD_BYTES: '5000',
   });
+  workers = startTestWorkers(envOf(app), { clamdPort: clamd.port });
 });
 afterAll(async () => {
+  await workers.close();
   await app.close();
   await clamd.close();
   storage.cleanup();

@@ -18,6 +18,9 @@ export function testEnv(overrides: Record<string, string> = {}): Env {
     MFA_ENCRYPTION_KEY: 'test-mfa-encryption-key-test-mfa-key',
     CORS_ORIGINS: 'http://localhost:3001',
     REGISTRATION_ENABLED: 'true',
+    REDIS_URL: process.env.TEST_REDIS_URL ?? 'redis://127.0.0.1:6380',
+    QUEUE_PREFIX: `t${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`,
+    JOB_BACKOFF_MS: '40',
     AUTH_RATE_LIMIT_PER_MIN: '1000',
     GLOBAL_RATE_LIMIT_PER_MIN: '100000',
     LOG_LEVEL: 'silent',
@@ -27,7 +30,9 @@ export function testEnv(overrides: Record<string, string> = {}): Env {
 
 /** Boots the app against the dev replica set and starts from an empty database. */
 export async function bootApp(overrides: Record<string, string> = {}): Promise<INestApplication> {
-  const app = await createApp(testEnv(overrides));
+  const env = testEnv(overrides);
+  const app = await createApp(env);
+  envs.set(app, env);
   await app.init();
   await mongoose.connection.dropDatabase();
   await syncIndexes();
@@ -170,7 +175,6 @@ import { createServer, type Server } from 'node:net';
 import { mkdtempSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { ScanService } from '../src/documents/scan.service';
 
 export const EICAR = 'X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*';
 
@@ -235,8 +239,6 @@ export function storedFiles(dir: string): string[] {
   return out;
 }
 
-export const settle = (app: INestApplication) => app.get(ScanService, { strict: false }).idle();
-
 type Actor = { agent: Member['agent']; csrf: string };
 export interface UploadSpec {
   title?: string;
@@ -283,3 +285,153 @@ export function putBytes(
     .set(upload.headers)
     .send(bytes);
 }
+
+// ---- Background processing: workers, fake Grok, queue settling ----
+import { createServer as createHttpServer, type Server as HttpServer } from 'node:http';
+import {
+  GrokClient,
+  startWorkers,
+  silentLogger,
+  type JobQueues,
+  type WorkerHandle,
+} from '@assar/jobs';
+import { ClamAvScanProvider, DisabledScanProvider } from '@assar/storage';
+import { createStorage } from '../src/storage/storage.module';
+import { QUEUES } from '../src/queue/queue.module';
+
+/** Waits until the scan (and optionally AI) queues have nothing waiting, running or delayed. */
+export async function settle(app: INestApplication, o: { ai?: boolean } = {}, timeoutMs = 20_000) {
+  const queues = app.get<JobQueues>(QUEUES, { strict: false });
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const c = await queues.counts();
+    const busy = (q: Record<string, number>) =>
+      (q.waiting ?? 0) + (q.active ?? 0) + (q.delayed ?? 0);
+    if (busy(c.scan) === 0 && (!o.ai || busy(c.ai) === 0)) return;
+    if (Date.now() > deadline) throw new Error(`queues did not settle: ${JSON.stringify(c)}`);
+    await new Promise((r) => setTimeout(r, 25));
+  }
+}
+
+export interface FakeGrokRequest {
+  auth: string | undefined;
+  body: { model: string; messages: { role: string; content: string }[] };
+}
+type GrokStep =
+  | { status: number }
+  | { json: object }
+  | { rawContent: string }
+  | { delayMs: number; then?: GrokStep };
+
+/**
+ * A stand-in for the Grok chat-completions API. By default it answers like a well-behaved model:
+ * for every source it returns one item that quotes the source's first line verbatim.
+ * Queue `steps` to simulate outages, bad output or fabricated quotes.
+ */
+export async function startFakeGrok() {
+  const requests: FakeGrokRequest[] = [];
+  const steps: GrokStep[] = [];
+
+  const wellBehaved = (user: string) => {
+    const items = [...user.matchAll(/<source id="(S\d+)"[^>]*>\n([\s\S]*?)\n<\/source>/g)].map(
+      ([, id, text]) => ({
+        label: 'Key point',
+        text: `Point drawn from ${id}`,
+        dateText: null,
+        risk: null,
+        citations: [{ sourceId: id, quote: text!.split('\n')[0]!.slice(0, 80) }],
+      }),
+    );
+    return {
+      title: 'Test output',
+      body: `Summary of ${items.length} source(s).`,
+      answerable: true,
+      items,
+      assumptions: [],
+    };
+  };
+  const completion = (content: string) => ({
+    model: 'fake-grok-1',
+    choices: [{ message: { content }, finish_reason: 'stop' }],
+    usage: { prompt_tokens: 100, completion_tokens: 50 },
+  });
+
+  const server: HttpServer = createHttpServer((req, res) => {
+    let raw = '';
+    req.on('data', (c) => (raw += c));
+    req.on('end', async () => {
+      const body = JSON.parse(raw || '{}') as FakeGrokRequest['body'];
+      requests.push({ auth: req.headers.authorization, body });
+      let step: GrokStep | undefined = steps.shift();
+      while (step && 'delayMs' in step) {
+        const { delayMs, then } = step;
+        await new Promise((r) => setTimeout(r, delayMs));
+        step = then;
+      }
+      const send = (status: number, payload: unknown) => {
+        res.writeHead(status, { 'content-type': 'application/json' });
+        res.end(JSON.stringify(payload));
+      };
+      if (step && 'status' in step) return send(step.status, { error: 'simulated' });
+      if (step && 'rawContent' in step) return send(200, completion(step.rawContent));
+      const user = body.messages.find((m) => m.role === 'user')?.content ?? '';
+      send(200, completion(JSON.stringify(step && 'json' in step ? step.json : wellBehaved(user))));
+    });
+  });
+  await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+  const port = (server.address() as { port: number }).port;
+  return {
+    url: `http://127.0.0.1:${port}/v1`,
+    requests,
+    /** Next requests consume these steps in order, then fall back to the well-behaved default. */
+    script: (...s: GrokStep[]) => void steps.push(...s),
+    reset: () => {
+      steps.length = 0;
+      requests.length = 0;
+    },
+    close: () => new Promise<void>((r) => server.close(() => r())),
+  };
+}
+
+export interface TestWorkers {
+  handle: WorkerHandle;
+  close(): Promise<void>;
+}
+
+/** Runs the real worker code in-process against the same Redis/Mongo/storage as the app under test. */
+export function startTestWorkers(
+  env: Env,
+  o: {
+    clamdPort?: number;
+    grokUrl?: string | null;
+    maxContextChars?: number;
+    allowUnscanned?: boolean;
+  } = {},
+): TestWorkers {
+  const handle = startWorkers({
+    redisUrl: env.REDIS_URL,
+    prefix: env.QUEUE_PREFIX,
+    logger: silentLogger,
+    storage: createStorage(env),
+    scanProvider: o.clamdPort
+      ? new ClamAvScanProvider('127.0.0.1', o.clamdPort, 3000)
+      : new DisabledScanProvider(),
+    grok: o.grokUrl
+      ? new GrokClient({
+          apiKey: 'test-grok-key',
+          baseUrl: o.grokUrl,
+          model: 'test-model',
+          timeoutMs: 1500,
+        })
+      : null,
+    maxContextChars: o.maxContextChars,
+    allowUnscanned: o.allowUnscanned,
+    scanConcurrency: 2,
+    aiConcurrency: 2,
+  });
+  return { handle, close: () => handle.close() };
+}
+
+/** Environment the app was booted with (workers must use the same queue prefix and storage). */
+const envs = new WeakMap<INestApplication, Env>();
+export const envOf = (app: INestApplication) => envs.get(app)!;

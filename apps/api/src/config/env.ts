@@ -43,10 +43,21 @@ const object = z.object({
     .default(100 * 1024 * 1024),
   UPLOAD_URL_TTL_SECONDS: z.coerce.number().int().min(30).max(3600).default(900),
   DOWNLOAD_URL_TTL_SECONDS: z.coerce.number().int().min(10).max(900).default(300),
-  /** `disabled` marks uploads `skipped` (never `clean`) and is refused in production. */
+  /** Which scanner the *worker* uses. `disabled` marks uploads `skipped` (never `clean`); refused in production. */
   SCAN_PROVIDER: z.enum(['clamav', 'disabled']).default('clamav'),
-  CLAMAV_HOST: z.string().default('127.0.0.1'),
-  CLAMAV_PORT: z.coerce.number().int().default(3310),
+
+  // --- Job queue & AI (the worker holds the Grok credentials; the API never sees them) ---
+  REDIS_URL: z.string().url(),
+  QUEUE_PREFIX: z
+    .string()
+    .regex(/^[\w-]{1,40}$/)
+    .default('assar'),
+  /** Turns the AI endpoints on. The worker must also be configured with Grok credentials. */
+  AI_ENABLED: bool.default('false'),
+  AI_MAX_ACTIVE_JOBS_PER_ORG: z.coerce.number().int().min(1).default(5),
+  AI_JOB_MAX_ATTEMPTS: z.coerce.number().int().min(1).max(10).default(3),
+  SCAN_JOB_MAX_ATTEMPTS: z.coerce.number().int().min(1).max(10).default(3),
+  JOB_BACKOFF_MS: z.coerce.number().int().min(10).default(5000),
 });
 
 const schema = object.superRefine((env, ctx) => {

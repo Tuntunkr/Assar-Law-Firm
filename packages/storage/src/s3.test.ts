@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { S3Storage } from './s3.storage';
+import { S3Storage } from './s3.js';
 
 const storage = new S3Storage({
-  S3_ENDPOINT: 'http://minio.test:9000',
-  S3_REGION: 'us-east-1',
-  S3_BUCKET: 'assar-private',
-  S3_ACCESS_KEY: 'AKIATESTTESTTESTTEST',
-  S3_SECRET_KEY: 'test-secret-key-test-secret-key',
-  S3_FORCE_PATH_STYLE: true,
+  endpoint: 'http://minio.test:9000',
+  region: 'us-east-1',
+  bucket: 'assar-private',
+  accessKey: 'AKIATESTTESTTESTTEST',
+  secretKey: 'test-secret-key-test-secret-key',
+  forcePathStyle: true,
 });
 
 // These checks only cover URL signing (no network). Behaviour against a real bucket is not covered here.

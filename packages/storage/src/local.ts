@@ -2,9 +2,25 @@ import { createReadStream, createWriteStream } from 'node:fs';
 import { mkdir, rename, rm, stat } from 'node:fs/promises';
 import { dirname, resolve, sep } from 'node:path';
 import type { Readable } from 'node:stream';
-import { hmac, safeEqual } from '../common/crypto';
-import type { Env } from '../config/env';
-import { UPLOAD_CONTENT_TYPE, type SignedRequest, type StorageService } from './storage.service';
+import { createHmac, timingSafeEqual } from 'node:crypto';
+import { UPLOAD_CONTENT_TYPE, type SignedRequest, type StorageService } from './storage.js';
+
+export interface LocalStorageOptions {
+  /** Root directory for stored objects. */
+  directory: string;
+  /** Secret used to HMAC-sign URLs. */
+  signingSecret: string;
+  /** Base URL where the API serves `/internal/storage`. */
+  publicBaseUrl: string;
+}
+
+const hmac = (secret: string, value: string) =>
+  createHmac('sha256', secret).update(value).digest('hex');
+const safeEqual = (a: string, b: string) => {
+  const ab = Buffer.from(a);
+  const bb = Buffer.from(b);
+  return ab.length === bb.length && timingSafeEqual(ab, bb);
+};
 
 const KEY_PATTERN = /^[A-Za-z0-9][A-Za-z0-9/_.-]*$/;
 
@@ -15,10 +31,8 @@ const KEY_PATTERN = /^[A-Za-z0-9][A-Za-z0-9/_.-]*$/;
 export class LocalStorage implements StorageService {
   private readonly root: string;
 
-  constructor(
-    private readonly env: Pick<Env, 'STORAGE_LOCAL_DIR' | 'SESSION_SECRET' | 'publicApiUrl'>,
-  ) {
-    this.root = resolve(env.STORAGE_LOCAL_DIR);
+  constructor(private readonly env: LocalStorageOptions) {
+    this.root = resolve(env.directory);
   }
 
   /** Maps a key to a path strictly inside the storage root. */
@@ -32,7 +46,7 @@ export class LocalStorage implements StorageService {
   }
 
   private sign(op: 'put' | 'get', key: string, exp: number, extra: string) {
-    return hmac(this.env.SESSION_SECRET, `storage:${op}:${key}:${exp}:${extra}`);
+    return hmac(this.env.signingSecret, `storage:${op}:${key}:${exp}:${extra}`);
   }
 
   /** Verifies a signed URL's parameters. `extra` is the size (put) or filename (get). */
@@ -54,7 +68,7 @@ export class LocalStorage implements StorageService {
       sig: this.sign(op, key, exp, extra),
     });
     return {
-      url: `${this.env.publicApiUrl}/internal/storage?${q}`,
+      url: `${this.env.publicBaseUrl}/internal/storage?${q}`,
       expiresAt: new Date(exp * 1000),
     };
   }

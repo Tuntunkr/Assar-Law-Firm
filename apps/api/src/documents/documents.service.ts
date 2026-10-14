@@ -12,7 +12,8 @@ import { randomToken } from '../common/crypto';
 import { ApiError } from '../common/exception.filter';
 import { ENV, type Env } from '../config/env';
 import { MatterAccessService } from '../matters/matter-access.service';
-import { STORAGE, type StorageService } from '../storage/storage.service';
+import type { StorageService } from '@assar/storage';
+import { STORAGE } from '../storage/storage.token';
 import { ScanService } from './scan.service';
 
 type Req = Pick<AppRequest, 'ip' | 'id'>;
@@ -172,7 +173,7 @@ export class DocumentsService {
     );
     if (!moved)
       return versionDto((await documentVersions.findById(auth.organizationId, v._id)) ?? v);
-    this.scanner.dispatch(moved);
+    await this.scanner.dispatch(moved, 'pending_upload');
     await this.audit.record({
       organizationId: auth.organizationId,
       actorId: auth.userId,
@@ -209,7 +210,7 @@ export class DocumentsService {
         'Only versions whose scan failed (or got stuck) can be re-scanned',
       );
     }
-    this.scanner.dispatch(moved);
+    await this.scanner.dispatch(moved, 'scan_failed');
     await this.audit.record({
       organizationId: auth.organizationId,
       actorId: auth.userId,

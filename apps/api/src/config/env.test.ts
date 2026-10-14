@@ -5,6 +5,7 @@ const base = {
   MONGODB_URI: 'mongodb://x',
   SESSION_SECRET: 'a'.repeat(32),
   MFA_ENCRYPTION_KEY: 'b'.repeat(32),
+  REDIS_URL: 'redis://127.0.0.1:6380',
 };
 
 describe('loadEnv', () => {
