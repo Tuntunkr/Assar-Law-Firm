@@ -1,0 +1,38 @@
+# Development dependencies only. NOTE: not yet validated (Docker unavailable on author machine).
+services:
+  mongo:
+    image: mongo:7
+    command: ['--replSet', 'rs0', '--bind_ip_all']
+    ports: ['27017:27017']
+    volumes: [mongo-data:/data/db]
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'mongosh',
+          '--quiet',
+          '--eval',
+          "try{rs.status().ok}catch(e){rs.initiate({_id:'rs0',members:[{_id:0,host:'localhost:27017'}]}).ok}",
+        ]
+      interval: 10s
+      retries: 10
+  redis:
+    image: redis:7-alpine
+    ports: ['6379:6379']
+  minio:
+    image: minio/minio
+    command: server /data --console-address ":9001"
+    environment: { MINIO_ROOT_USER: dev-minio, MINIO_ROOT_PASSWORD: dev-minio-secret }
+    ports: ['9000:9000', '9001:9001']
+    volumes: [minio-data:/data]
+  clamav:
+    image: clamav/clamav:stable
+    ports: ['3310:3310']
+  n8n:
+    image: n8nio/n8n
+    ports: ['5678:5678']
+    volumes: [n8n-data:/home/node/.n8n]
+  mailpit:
+    image: axllent/mailpit
+    ports: ['1025:1025', '8025:8025']
+volumes: { mongo-data: {}, minio-data: {}, n8n-data: {} }
