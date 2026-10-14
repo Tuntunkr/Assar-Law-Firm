@@ -1,0 +1,29 @@
+{
+  "name": "@assar/database",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint --config ../../eslint.config.mjs src",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@assar/types": "workspace:*",
+    "mongoose": "^9.11.2",
+    "mongodb": "^7.7.0"
+  },
+  "devDependencies": {
+    "@assar/config": "workspace:*",
+    "@types/node": "^26.6.5"
+  }
+}

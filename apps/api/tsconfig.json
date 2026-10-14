@@ -1,0 +1,16 @@
+{
+  "extends": "@assar/config/tsconfig.node.json",
+  "compilerOptions": {
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "outDir": "dist",
+    "rootDir": ".",
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    "isolatedModules": false,
+    "declaration": false,
+    "incremental": true,
+    "types": ["node"]
+  },
+  "include": ["src", "test"]
+}
