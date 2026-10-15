@@ -1,0 +1,160 @@
+{
+  "name": "Assar: daily summary for owners and admins",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "30 7 * * *"
+            }
+          ]
+        }
+      },
+      "id": "9446cbea-28ad-5842-aada-34237b34f224",
+      "name": "Schedule",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "b3e46fbb-51f7-5d8c-a9a0-f22d710f536d",
+              "name": "apiUrl",
+              "value": "https://assar-api.example.com/v1",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "ed6bd760-bcde-52d6-999a-ad2fabfbd757",
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [220, 0],
+      "notes": "Edit apiUrl to your Assar API base URL (including /v1).",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $('Config').first().json.apiUrl + '/automation/reports/daily' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "21d1315c-ed1f-5c25-8bff-e6423ca9d1d3",
+      "name": "Get daily report",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, 0],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "assar-automation-token",
+          "name": "Assar automation token"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Counts only. The API leaves restricted matters out of the numbers entirely.\nconst r = $input.first().json;\nconst c = r.counts;\nconst body = `Open matters: ${c.openMatters}. Overdue tasks: ${c.overdueTasks}. Deadlines in the next 7 days: ${c.upcomingDeadlines}. AI drafts awaiting review: ${c.pendingDrafts}. Failed document scans: ${c.scanFailures}. (Restricted matters are not included.)`;\nreturn r.recipients.map((id) => ({\n  json: { recipientUserId: id, title: `Daily summary for ${r.date}`, body, dedupeKey: `daily-report-${r.date}-${id}` },\n}));"
+      },
+      "id": "a175e14f-e1ef-5afc-9358-ac16f151e4f8",
+      "name": "Build notifications",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [660, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').first().json.apiUrl + '/automation/notifications' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {},
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ recipientUserId: $json.recipientUserId, title: $json.title, body: $json.body, link: $json.link, dedupeKey: $json.dedupeKey }) }}"
+      },
+      "id": "5e43dad6-9793-54c2-9039-c582d9adcada",
+      "name": "Create notification",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [880, 0],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "assar-automation-token",
+          "name": "Assar automation token"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    }
+  ],
+  "connections": {
+    "Schedule": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "Get daily report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get daily report": {
+      "main": [
+        [
+          {
+            "node": "Build notifications",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build notifications": {
+      "main": [
+        [
+          {
+            "node": "Create notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "tags": [],
+  "meta": {
+    "templateCredsSetupCompleted": false
+  }
+}

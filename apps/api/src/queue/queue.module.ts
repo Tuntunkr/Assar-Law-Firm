@@ -16,6 +16,7 @@ export const QUEUES = Symbol('QUEUES');
           redisUrl: env.REDIS_URL,
           prefix: env.QUEUE_PREFIX,
           scanAttempts: env.SCAN_JOB_MAX_ATTEMPTS,
+          eventsEnabled: env.WORKFLOWS_ENABLED,
           backoffDelayMs: env.JOB_BACKOFF_MS,
         }),
     },

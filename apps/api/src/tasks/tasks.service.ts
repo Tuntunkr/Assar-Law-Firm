@@ -22,6 +22,7 @@ export const taskDto = (t: TaskDoc) => ({
   dueAt: t.dueAt ?? null,
   completedAt: t.completedAt ?? null,
   createdBy: String(t.createdBy),
+  createdVia: t.createdVia ?? 'user',
   createdAt: t.createdAt,
   updatedAt: t.updatedAt,
 });

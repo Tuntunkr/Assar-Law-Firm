@@ -87,7 +87,11 @@ export const invitations = {
 };
 
 export const audit = {
-  record: (entry: Omit<AuditLogDoc, '_id' | 'createdAt'>) => AuditLogModel.create(entry),
+  record: (entry: Omit<AuditLogDoc, '_id' | 'createdAt'>) =>
+    AuditLogModel.create({
+      ...entry,
+      actorType: entry.actorType ?? (entry.actorId ? 'staff' : 'system'),
+    }),
   async listPage(organizationId: Id, limit: number, cursor?: string, action?: string) {
     const c = decodeCursor(cursor);
     if (c === null) throw new InvalidCursorError();
@@ -137,3 +141,4 @@ export class InvalidCursorError extends Error {
 export * from './crm.js';
 export * from './work.js';
 export * from './ai.js';
+export * from './portal.js';

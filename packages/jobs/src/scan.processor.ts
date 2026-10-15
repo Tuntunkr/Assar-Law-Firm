@@ -1,12 +1,14 @@
 import { UnrecoverableError, type Job } from 'bullmq';
 import { audit, documentVersions, type DocumentVersionDoc } from '@assar/database';
 import type { ScanProvider, StorageService } from '@assar/storage';
-import type { JobLogger, ScanJobData } from './names.js';
+import type { EventSink, JobLogger, ScanJobData } from './names.js';
 
 export interface ScanProcessorDeps {
   storage: StorageService;
   provider: ScanProvider;
   logger: JobLogger;
+  /** Optional: announces `document.scan_clean` to workflows. */
+  events?: EventSink;
 }
 
 const entry = (
@@ -48,6 +50,23 @@ export function createScanProcessor(deps: ScanProcessorDeps) {
       await audit.record(
         entry(v, `document.scan_${outcome.status}`, { engine: outcome.engine }) as never,
       );
+      if (outcome.status === 'clean') {
+        // Best effort: a failed announcement must never fail or retry the scan itself. Ids only.
+        await deps.events
+          ?.publish({
+            event: 'document.scan_clean',
+            organizationId: String(org),
+            data: {
+              documentId: String(v.documentId),
+              version: v.version,
+              matterId: String(v.matterId),
+              uploadedBy: String(v.uploadedBy),
+            },
+          })
+          .catch((e: Error) =>
+            deps.logger.warn({ error: e.message }, 'could not publish document.scan_clean'),
+          );
+      }
     } catch (err) {
       const isLast = job.attemptsMade + 1 >= (job.opts.attempts ?? 1);
       deps.logger.warn(

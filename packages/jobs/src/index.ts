@@ -10,3 +10,4 @@ export * from './scan.processor.js';
 export * from './ai.processor.js';
 export * from './workers.js';
 export * from './heartbeat.js';
+export * from './events.processor.js';

@@ -118,6 +118,8 @@ export interface SessionDoc {
   _id: Id;
   tokenHash: string;
   userId: Id;
+  /** `client` sessions belong to portal users (userId is then the client user's id). */
+  principal?: 'staff' | 'client';
   organizationId: Id;
   /** Password (+ MFA when enabled) verified. */
   mfaVerified: boolean;
@@ -132,6 +134,7 @@ const sessionSchema = new Schema<SessionDoc>(
   {
     tokenHash: { type: String, required: true, unique: true },
     userId: { type: Schema.Types.ObjectId, required: true },
+    principal: { type: String, enum: ['staff', 'client'], default: 'staff' },
     organizationId: { type: Schema.Types.ObjectId, required: true },
     mfaVerified: { type: Boolean, default: false },
     ip: String,
@@ -181,6 +184,8 @@ export interface AuditLogDoc {
   _id: Id;
   organizationId: Id;
   actorId?: Id | null;
+  /** Who acted: a staff user, a portal client, an automation service token, or the system/worker. */
+  actorType?: 'staff' | 'client' | 'service' | 'system';
   action: string;
   targetType?: string;
   targetId?: string;
@@ -194,6 +199,7 @@ const auditSchema = new Schema<AuditLogDoc>(
   {
     organizationId: { type: Schema.Types.ObjectId, required: true },
     actorId: { type: Schema.Types.ObjectId, default: null },
+    actorType: { type: String, enum: ['staff', 'client', 'service', 'system'], default: 'staff' },
     action: { type: String, required: true, maxlength: 100 },
     targetType: String,
     targetId: String,
@@ -321,6 +327,10 @@ export interface MatterDoc {
   status: 'open' | 'pending' | 'closed' | 'archived';
   /** Restricted matters are visible only to users in matter_access (plus the owner, audited). */
   restricted: boolean;
+  /** Published to the client portal. Nothing is visible to the client until a staff member sets this. */
+  portalVisible?: boolean;
+  /** Client-facing status message. */
+  portalNote?: string | null;
   leadAttorneyId?: Id | null;
   teamIds: Id[];
   openedAt: Date;
@@ -340,6 +350,8 @@ const matterSchema = new Schema<MatterDoc>(
     description: { type: String, maxlength: 5000 },
     status: { type: String, enum: ['open', 'pending', 'closed', 'archived'], default: 'open' },
     restricted: { type: Boolean, default: false },
+    portalVisible: { type: Boolean, default: false },
+    portalNote: { type: String, maxlength: 1000, default: null },
     leadAttorneyId: { type: Schema.Types.ObjectId, default: null },
     teamIds: { type: [Schema.Types.ObjectId], default: [] },
     openedAt: { type: Date, required: true },
@@ -492,6 +504,9 @@ export interface DocumentVersionDoc {
   /** Object key in private storage. Never returned by the API; file bytes are never stored in MongoDB. */
   storageKey: string;
   status: DocumentVersionStatus;
+  /** Shared with the client portal (per version, explicit). */
+  clientVisible?: boolean;
+  clientSharedAt?: Date | null;
   scan?: { engine: string; result?: string; scannedAt: Date } | null;
   uploadedBy: Id;
   completedAt?: Date | null;
@@ -508,6 +523,8 @@ const versionSchema = new Schema<DocumentVersionDoc>(
     sizeBytes: { type: Number, required: true, min: 1 },
     storageKey: { type: String, required: true },
     status: { type: String, enum: DOCUMENT_VERSION_STATUSES, required: true },
+    clientVisible: { type: Boolean, default: false },
+    clientSharedAt: { type: Date, default: null },
     scan: {
       type: new Schema({ engine: String, result: String, scannedAt: Date }, { _id: false }),
       default: null,
@@ -576,6 +593,8 @@ export interface TaskDoc {
   dueAt?: Date | null;
   completedAt?: Date | null;
   createdBy: Id;
+  /** `workflow` when created by an automation service token (createdBy is then the token id). */
+  createdVia?: 'user' | 'workflow';
   createdAt: Date;
   updatedAt: Date;
 }
@@ -591,6 +610,7 @@ const taskSchema = new Schema<TaskDoc>(
     dueAt: { type: Date, default: null },
     completedAt: { type: Date, default: null },
     createdBy: { type: Schema.Types.ObjectId, required: true },
+    createdVia: { type: String, enum: ['user', 'workflow'], default: 'user' },
   },
   { timestamps: true },
 );
@@ -695,6 +715,10 @@ export interface AiOutputDoc {
   result: Record<string, unknown>;
   sources: AiSourceRef[];
   reviewStatus: 'draft' | 'approved' | 'rejected';
+  /** Approved outputs are only visible to the client after being shared explicitly. */
+  sharedWithClient?: boolean;
+  sharedAt?: Date | null;
+  sharedBy?: Id | null;
   reviewedBy?: Id | null;
   reviewedAt?: Date | null;
   reviewNote?: string | null;
@@ -715,6 +739,9 @@ const aiOutputSchema = new Schema<AiOutputDoc>(
     result: { type: Schema.Types.Mixed, required: true },
     sources: { type: Schema.Types.Mixed, default: [] },
     reviewStatus: { type: String, enum: ['draft', 'approved', 'rejected'], default: 'draft' },
+    sharedWithClient: { type: Boolean, default: false },
+    sharedAt: { type: Date, default: null },
+    sharedBy: { type: Schema.Types.ObjectId, default: null },
     reviewedBy: { type: Schema.Types.ObjectId, default: null },
     reviewedAt: { type: Date, default: null },
     reviewNote: { type: String, maxlength: 2000, default: null },
@@ -729,3 +756,141 @@ aiOutputSchema.index({ organizationId: 1, jobId: 1 }, { unique: true });
 aiOutputSchema.index({ organizationId: 1, matterId: 1, _id: -1 });
 aiOutputSchema.index({ organizationId: 1, reviewStatus: 1, _id: -1 });
 export const AiOutputModel = define<AiOutputDoc>('AiOutput', aiOutputSchema);
+
+// ---- Client portal, notifications, automation ----
+export interface ClientUserDoc {
+  _id: Id;
+  organizationId: Id;
+  /** The client record this portal user belongs to: the ONLY client whose data they can see. */
+  clientId: Id;
+  email: string;
+  name: string;
+  passwordHash: string;
+  status: 'active' | 'disabled';
+  failedLoginCount: number;
+  lockedUntil?: Date | null;
+  lastLoginAt?: Date | null;
+  createdBy: Id;
+  createdAt: Date;
+  updatedAt: Date;
+}
+const clientUserSchema = new Schema<ClientUserDoc>(
+  {
+    organizationId: { type: Schema.Types.ObjectId, required: true },
+    clientId: { type: Schema.Types.ObjectId, required: true },
+    email: { type: String, required: true, lowercase: true, trim: true, maxlength: 254 },
+    name: { type: String, required: true, trim: true, maxlength: 100 },
+    passwordHash: { type: String, required: true },
+    status: { type: String, enum: ['active', 'disabled'], default: 'active' },
+    failedLoginCount: { type: Number, default: 0 },
+    lockedUntil: { type: Date, default: null },
+    lastLoginAt: { type: Date, default: null },
+    createdBy: { type: Schema.Types.ObjectId, required: true },
+  },
+  { timestamps: true },
+);
+clientUserSchema.index({ organizationId: 1, email: 1 }, { unique: true });
+clientUserSchema.index({ organizationId: 1, clientId: 1 });
+export const ClientUserModel = define<ClientUserDoc>('ClientUser', clientUserSchema);
+
+export interface PortalInvitationDoc {
+  _id: Id;
+  organizationId: Id;
+  clientId: Id;
+  email: string;
+  name?: string;
+  tokenHash: string;
+  invitedBy: Id;
+  expiresAt: Date;
+  acceptedAt?: Date | null;
+  createdAt: Date;
+}
+const portalInvitationSchema = new Schema<PortalInvitationDoc>(
+  {
+    organizationId: { type: Schema.Types.ObjectId, required: true },
+    clientId: { type: Schema.Types.ObjectId, required: true },
+    email: { type: String, required: true, lowercase: true, trim: true },
+    name: { type: String, maxlength: 100 },
+    tokenHash: { type: String, required: true, unique: true },
+    invitedBy: { type: Schema.Types.ObjectId, required: true },
+    expiresAt: { type: Date, required: true },
+    acceptedAt: { type: Date, default: null },
+  },
+  { timestamps: { createdAt: true, updatedAt: false } },
+);
+portalInvitationSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+portalInvitationSchema.index({ organizationId: 1, clientId: 1 });
+export const PortalInvitationModel = define<PortalInvitationDoc>(
+  'PortalInvitation',
+  portalInvitationSchema,
+);
+
+export interface ServiceTokenDoc {
+  _id: Id;
+  organizationId: Id;
+  name: string;
+  /** First characters of the token, for recognising it in a list. The full token is shown once. */
+  prefix: string;
+  tokenHash: string;
+  scopes: string[];
+  status: 'active' | 'revoked';
+  expiresAt?: Date | null;
+  lastUsedAt?: Date | null;
+  createdBy: Id;
+  revokedAt?: Date | null;
+  createdAt: Date;
+}
+const serviceTokenSchema = new Schema<ServiceTokenDoc>(
+  {
+    organizationId: { type: Schema.Types.ObjectId, required: true },
+    name: { type: String, required: true, trim: true, maxlength: 100 },
+    prefix: { type: String, required: true },
+    tokenHash: { type: String, required: true, unique: true },
+    scopes: { type: [String], default: [] },
+    status: { type: String, enum: ['active', 'revoked'], default: 'active' },
+    expiresAt: { type: Date, default: null },
+    lastUsedAt: { type: Date, default: null },
+    createdBy: { type: Schema.Types.ObjectId, required: true },
+    revokedAt: { type: Date, default: null },
+  },
+  { timestamps: { createdAt: true, updatedAt: false } },
+);
+serviceTokenSchema.index({ organizationId: 1, status: 1 });
+export const ServiceTokenModel = define<ServiceTokenDoc>('ServiceToken', serviceTokenSchema);
+
+export interface NotificationDoc {
+  _id: Id;
+  organizationId: Id;
+  userId: Id;
+  title: string;
+  body?: string;
+  link?: { type: string; id: string } | null;
+  /** Makes creation idempotent (e.g. one reminder per item per day). */
+  dedupeKey?: string;
+  source: 'workflow' | 'system';
+  readAt?: Date | null;
+  createdAt: Date;
+}
+const notificationSchema = new Schema<NotificationDoc>(
+  {
+    organizationId: { type: Schema.Types.ObjectId, required: true },
+    userId: { type: Schema.Types.ObjectId, required: true },
+    title: { type: String, required: true, maxlength: 200 },
+    body: { type: String, maxlength: 1000 },
+    link: {
+      type: new Schema({ type: String, id: String }, { _id: false }),
+      default: null,
+    },
+    dedupeKey: { type: String, maxlength: 200 },
+    source: { type: String, enum: ['workflow', 'system'], default: 'workflow' },
+    readAt: { type: Date, default: null },
+  },
+  { timestamps: { createdAt: true, updatedAt: false } },
+);
+notificationSchema.index({ organizationId: 1, userId: 1, _id: -1 });
+notificationSchema.index({ organizationId: 1, userId: 1, readAt: 1 });
+notificationSchema.index(
+  { organizationId: 1, dedupeKey: 1 },
+  { unique: true, partialFilterExpression: { dedupeKey: { $type: 'string' } } },
+);
+export const NotificationModel = define<NotificationDoc>('Notification', notificationSchema);

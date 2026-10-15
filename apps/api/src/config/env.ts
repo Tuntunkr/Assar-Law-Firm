@@ -54,6 +54,8 @@ const object = z.object({
     .default('assar'),
   /** Turns the AI endpoints on. The worker must also be configured with Grok credentials. */
   AI_ENABLED: bool.default('false'),
+  /** Publish workflow events (matter.created, ...) to the queue for delivery to n8n by the worker. */
+  WORKFLOWS_ENABLED: bool.default('false'),
   AI_MAX_ACTIVE_JOBS_PER_ORG: z.coerce.number().int().min(1).default(5),
   AI_JOB_MAX_ATTEMPTS: z.coerce.number().int().min(1).max(10).default(3),
   SCAN_JOB_MAX_ATTEMPTS: z.coerce.number().int().min(1).max(10).default(3),

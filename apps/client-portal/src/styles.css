@@ -1,0 +1,24 @@
+@import 'tailwindcss';
+@import '@assar/ui/theme.css';
+@source "../../../packages/ui/src";
+@source "./";
+
+body {
+  font-family:
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
+  color: #0f1c36;
+  background: #f8fafc;
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

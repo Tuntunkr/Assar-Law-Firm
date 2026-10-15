@@ -44,4 +44,29 @@ describe('loadWorkerEnv', () => {
       expect(String(e)).not.toContain('super-secret-key');
     }
   });
+
+  it('validates workflow delivery settings', () => {
+    const base2 = { ...base, N8N_WEBHOOK_BASE_URL: 'https://n8n.example.com/webhook/assar' };
+    expect(() => loadWorkerEnv(base2)).toThrow(/N8N_WEBHOOK_SECRET/);
+    expect(() => loadWorkerEnv({ ...base2, N8N_WEBHOOK_SECRET: 'short' })).toThrow(
+      /N8N_WEBHOOK_SECRET/,
+    );
+    expect(
+      loadWorkerEnv({ ...base2, N8N_WEBHOOK_SECRET: 'a-long-enough-shared-secret' })
+        .N8N_WEBHOOK_BASE_URL,
+    ).toContain('n8n.example.com');
+    const prod = {
+      ...base2,
+      N8N_WEBHOOK_SECRET: 'a-long-enough-shared-secret',
+      NODE_ENV: 'production',
+      STORAGE_DRIVER: 's3',
+      S3_BUCKET: 'b',
+      S3_ACCESS_KEY: 'k',
+      S3_SECRET_KEY: 's',
+    };
+    expect(() =>
+      loadWorkerEnv({ ...prod, N8N_WEBHOOK_BASE_URL: 'http://n8n.example.com/webhook/assar' }),
+    ).toThrow(/https/);
+    expect(() => loadWorkerEnv(prod)).not.toThrow();
+  });
 });

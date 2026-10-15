@@ -13,7 +13,7 @@ import type { AiTask } from '@assar/types';
 import { describeError, JobFailure } from './errors.js';
 import { extractText, readCapped } from './extract.js';
 import type { GrokClient } from './grok.js';
-import type { AiJobData, JobLogger } from './names.js';
+import type { AiJobData, EventSink, JobLogger } from './names.js';
 import { buildPrompt, type Source } from './prompts.js';
 import { parseModelOutput, verifyOutput } from './verify.js';
 
@@ -26,6 +26,8 @@ export interface AiProcessorDeps {
   maxExtractBytes: number;
   /** Development only: allow versions marked `skipped` (scanner disabled). */
   allowUnscanned: boolean;
+  /** Optional: announces `ai.output_ready` to workflows. */
+  events?: EventSink;
 }
 
 type JobRecord = NonNullable<Awaited<ReturnType<typeof aiJobs.findById>>>;
@@ -181,6 +183,21 @@ export function createAiProcessor(deps: AiProcessorDeps) {
         sources: sources.length,
       },
     } as never);
+    await deps.events
+      ?.publish({
+        event: 'ai.output_ready',
+        organizationId: org,
+        data: {
+          outputId: String(output._id),
+          jobId: id,
+          matterId: String(rec.matterId),
+          requestedBy: String(rec.requestedBy),
+          task: rec.task,
+        },
+      })
+      .catch((e: Error) =>
+        deps.logger.warn({ error: e.message }, 'could not publish ai.output_ready'),
+      );
     return true;
   }
 

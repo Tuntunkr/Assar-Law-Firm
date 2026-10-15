@@ -1,11 +1,13 @@
 import { SetMetadata, createParamDecorator, type ExecutionContext } from '@nestjs/common';
-import type { Permission } from '@assar/types';
+import type { Permission, ServiceScope } from '@assar/types';
 import type { AppRequest } from './auth-context';
 
 export const IS_PUBLIC = 'isPublic';
 export const ALLOW_MFA_ENROLLMENT = 'allowMfaEnrollment';
 export const PERMISSIONS_KEY = 'permissions';
 export const IDEMPOTENT_KEY = 'idempotent';
+export const CLIENT_PORTAL = 'clientPortal';
+export const SERVICE_SCOPE = 'serviceScope';
 
 /** Route needs no session. */
 export const Public = () => SetMetadata(IS_PUBLIC, true);
@@ -20,4 +22,20 @@ export const Auth = createParamDecorator((_: unknown, ctx: ExecutionContext) => 
   const req = ctx.switchToHttp().getRequest<AppRequest>();
   if (!req.auth) throw new Error('Auth() used on a public route');
   return req.auth;
+});
+
+/** Route group for portal clients: authenticated with the portal cookie only (never staff sessions). */
+export const ClientPortal = () => SetMetadata(CLIENT_PORTAL, true);
+/** Route callable only by an automation service token holding `scope` (never by cookies). */
+export const ServiceAccess = (scope: ServiceScope) => SetMetadata(SERVICE_SCOPE, scope);
+
+export const Client = createParamDecorator((_: unknown, ctx: ExecutionContext) => {
+  const req = ctx.switchToHttp().getRequest<AppRequest>();
+  if (!req.client) throw new Error('Client() used outside a portal route');
+  return req.client;
+});
+export const Service = createParamDecorator((_: unknown, ctx: ExecutionContext) => {
+  const req = ctx.switchToHttp().getRequest<AppRequest>();
+  if (!req.service) throw new Error('Service() used outside an automation route');
+  return req.service;
 });

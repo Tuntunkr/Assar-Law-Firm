@@ -2,6 +2,7 @@ import { DynamicModule, Module } from '@nestjs/common';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { AiModule } from './ai/ai.module';
+import { AutomationModule } from './automation/automation.module';
 import { AuditModule } from './audit/audit.module';
 import { AuthModule } from './auth/auth.module';
 import { AuthGuard, PermissionsGuard } from './auth/guards';
@@ -18,6 +19,8 @@ import { ConflictsModule } from './conflicts/conflicts.module';
 import { DocumentsModule } from './documents/documents.module';
 import { MattersModule } from './matters/matters.module';
 import { OrganizationsModule } from './organizations/organizations.module';
+import { PortalAdminModule } from './portal-admin/portal-admin.module';
+import { PortalModule } from './portal/portal.module';
 import { QueueModule } from './queue/queue.module';
 import { StorageModule } from './storage/storage.module';
 import { SystemModule } from './system/system.module';
@@ -50,6 +53,9 @@ export class AppModule {
         TasksModule,
         AiModule,
         SystemModule,
+        PortalModule,
+        PortalAdminModule,
+        AutomationModule,
       ],
       controllers: [HealthController],
       providers: [

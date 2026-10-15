@@ -1,0 +1,173 @@
+{
+  "name": "Assar: review task for a new document",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "assar/document-scan-clean",
+        "authentication": "headerAuth",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "cded4a26-90b9-5698-946c-d8a0c2e900bb",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0],
+      "webhookId": "1e60ab97-8b1d-5865-b267-8cb221c01027",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "assar-webhook-token",
+          "name": "Assar webhook token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "f096dc1d-ad90-5f9d-a928-d65794cac681",
+              "name": "apiUrl",
+              "value": "https://assar-api.example.com/v1",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "aaccd5d4-fe23-523b-bd2c-e9a3deda99df",
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [220, 0],
+      "notes": "Edit apiUrl to your Assar API base URL (including /v1).",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $('Config').first().json.apiUrl + '/automation/matters/' + $('Webhook').first().json.body.data.matterId + '/context' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "2c1a1827-b2b2-5d2e-9917-40550e388110",
+      "name": "Get matter context",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, 0],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "assar-automation-token",
+          "name": "Assar automation token"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// A document just passed the virus scan. Ask the matter's lead attorney (or the uploader) to review it.\nconst event = $('Webhook').first().json.body;\nconst ctx = $input.first().json;\nreturn [{\n  json: {\n    title: 'Review the newly uploaded document',\n    description: 'A document passed the security scan. Open the matter to review it.',\n    matterId: ctx.id,\n    assigneeId: ctx.leadAttorneyId || event.data.uploadedBy,\n    dueAt: new Date(Date.now() + 2 * 86400000).toISOString(),\n    key: `document-review-${event.id}`,\n  },\n}];"
+      },
+      "id": "7790690e-950b-5327-80b1-8d24e6a4cbb5",
+      "name": "Plan review task",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [660, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').first().json.apiUrl + '/automation/tasks' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {},
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ title: $json.title, description: $json.description, matterId: $json.matterId, assigneeId: $json.assigneeId, dueAt: $json.dueAt, priority: 'normal' }) }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Idempotency-Key",
+              "value": "={{ $json.key }}"
+            }
+          ]
+        }
+      },
+      "id": "8da512d0-501c-543f-b72d-446fbea04b98",
+      "name": "Create task",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [880, 0],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "assar-automation-token",
+          "name": "Assar automation token"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "Get matter context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get matter context": {
+      "main": [
+        [
+          {
+            "node": "Plan review task",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Plan review task": {
+      "main": [
+        [
+          {
+            "node": "Create task",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "tags": [],
+  "meta": {
+    "templateCredsSetupCompleted": false
+  }
+}

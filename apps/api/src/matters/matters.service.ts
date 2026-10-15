@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import {
   clients,
   matterAccess,
@@ -17,10 +17,12 @@ import type {
   updateMatterSchema,
   updatePartySchema,
 } from '@assar/validation';
+import type { JobQueues } from '@assar/jobs';
 import { AuditService } from '../audit/audit.service';
 import type { AppRequest, AuthContext } from '../common/auth-context';
 import { ApiError } from '../common/exception.filter';
 import { assertActiveMembers } from '../common/members';
+import { QUEUES } from '../queue/queue.module';
 import { MatterAccessService } from './matter-access.service';
 
 type Req = Pick<AppRequest, 'ip' | 'id'>;
@@ -37,6 +39,8 @@ export const matterDto = (m: MatterDoc) => ({
   description: m.description ?? null,
   status: m.status,
   restricted: m.restricted,
+  portalVisible: !!m.portalVisible,
+  portalNote: m.portalNote ?? null,
   leadAttorneyId: idStr(m.leadAttorneyId),
   teamIds: m.teamIds.map(String),
   openedAt: m.openedAt,
@@ -60,6 +64,7 @@ export class MattersService {
   constructor(
     private readonly access: MatterAccessService,
     private readonly audit: AuditService,
+    @Inject(QUEUES) private readonly queues: JobQueues,
   ) {}
 
   private async assertTeams(orgId: string, teamIds: string[]) {
@@ -126,6 +131,18 @@ export class MattersService {
       req,
       meta: { restricted: input.restricted, matterNumber: matter.matterNumber },
     });
+    // Best effort: a workflow hiccup must never fail matter creation. Ids only, no matter content.
+    await this.queues
+      .publish({
+        event: 'matter.created',
+        organizationId: orgId,
+        data: {
+          matterId: String(matter._id),
+          createdBy: auth.userId,
+          restricted: input.restricted,
+        },
+      })
+      .catch(() => undefined);
     return matterDto(matter);
   }
 

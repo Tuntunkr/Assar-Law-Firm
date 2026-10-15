@@ -1,5 +1,11 @@
 import { Queue, type JobsOptions } from 'bullmq';
-import { QUEUE_NAMES, type AiJobData, type ScanJobData } from './names.js';
+import {
+  QUEUE_NAMES,
+  type AiJobData,
+  type EventSink,
+  type ScanJobData,
+  type WorkflowEventData,
+} from './names.js';
 import { parseRedisUrl } from './redis.js';
 
 export interface JobQueuesOptions {
@@ -7,6 +13,9 @@ export interface JobQueuesOptions {
   /** Key prefix; tests use a unique one so runs never see each other's jobs. */
   prefix?: string;
   scanAttempts?: number;
+  /** When false, `publishEvent` does nothing (workflows not configured). */
+  eventsEnabled?: boolean;
+  eventAttempts?: number;
   /** Base for exponential backoff between retries. */
   backoffDelayMs?: number;
 }
@@ -15,9 +24,10 @@ const COMPLETED = { age: 3600, count: 1000 };
 const FAILED = { age: 7 * 24 * 3600, count: 5000 };
 
 /** Producer side: used by the API. Workers consume with {@link startWorkers}. */
-export class JobQueues {
+export class JobQueues implements EventSink {
   readonly scan: Queue<ScanJobData>;
   readonly ai: Queue<AiJobData>;
+  readonly events: Queue<WorkflowEventData>;
   readonly prefix: string;
 
   constructor(private readonly options: JobQueuesOptions) {
@@ -25,9 +35,11 @@ export class JobQueues {
     const connection = parseRedisUrl(options.redisUrl);
     this.scan = new Queue(QUEUE_NAMES.scan, { connection, prefix: this.prefix });
     this.ai = new Queue(QUEUE_NAMES.ai, { connection, prefix: this.prefix });
+    this.events = new Queue(QUEUE_NAMES.events, { connection, prefix: this.prefix });
     // Connection errors are surfaced through health checks; don't crash the process on a blip.
     this.scan.on('error', () => undefined);
     this.ai.on('error', () => undefined);
+    this.events.on('error', () => undefined);
   }
 
   private opts(attempts: number): JobsOptions {
@@ -68,13 +80,28 @@ export class JobQueues {
     }
   }
 
+  /** Queues an outbound workflow event for delivery (with retries). A no-op when workflows are disabled. */
+  async publish(evt: {
+    event: string;
+    organizationId: string;
+    data: WorkflowEventData['data'];
+  }): Promise<void> {
+    if (!this.options.eventsEnabled) return;
+    await this.events.add(
+      'event',
+      { ...evt, occurredAt: new Date().toISOString() },
+      this.opts(this.options.eventAttempts ?? 5),
+    );
+  }
+
   async counts() {
     const names = ['waiting', 'active', 'delayed', 'failed', 'completed'] as const;
-    const [scan, ai] = await Promise.all([
+    const [scan, ai, events] = await Promise.all([
       this.scan.getJobCounts(...names),
       this.ai.getJobCounts(...names),
+      this.events.getJobCounts(...names),
     ]);
-    return { scan, ai };
+    return { scan, ai, events };
   }
 
   /** Throws if Redis is unreachable (or doesn't answer within `timeoutMs`). */
@@ -88,6 +115,6 @@ export class JobQueues {
   }
 
   async close() {
-    await Promise.all([this.scan.close(), this.ai.close()]);
+    await Promise.all([this.scan.close(), this.ai.close(), this.events.close()]);
   }
 }

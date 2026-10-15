@@ -50,7 +50,7 @@ export interface Session {
     csrfToken: string;
     role: string;
     user: { id: string };
-    organization: { id: string };
+    organization: { id: string; slug: string; name: string };
     mfa: { enabled: boolean; enrollmentRequired: boolean };
   };
 }
@@ -288,13 +288,7 @@ export function putBytes(
 
 // ---- Background processing: workers, fake Grok, queue settling ----
 import { createServer as createHttpServer, type Server as HttpServer } from 'node:http';
-import {
-  GrokClient,
-  startWorkers,
-  silentLogger,
-  type JobQueues,
-  type WorkerHandle,
-} from '@assar/jobs';
+import { GrokClient, JobQueues, startWorkers, silentLogger, type WorkerHandle } from '@assar/jobs';
 import { ClamAvScanProvider, DisabledScanProvider } from '@assar/storage';
 import { createStorage } from '../src/storage/storage.module';
 import { QUEUES } from '../src/queue/queue.module';
@@ -406,8 +400,18 @@ export function startTestWorkers(
     grokUrl?: string | null;
     maxContextChars?: number;
     allowUnscanned?: boolean;
+    /** Deliver workflow events to this (fake) n8n webhook. */
+    n8n?: { baseUrl: string; secret: string };
   } = {},
 ): TestWorkers {
+  const eventQueues = o.n8n
+    ? new JobQueues({
+        redisUrl: env.REDIS_URL,
+        prefix: env.QUEUE_PREFIX,
+        eventsEnabled: true,
+        backoffDelayMs: 20,
+      })
+    : undefined;
   const handle = startWorkers({
     redisUrl: env.REDIS_URL,
     prefix: env.QUEUE_PREFIX,
@@ -426,12 +430,151 @@ export function startTestWorkers(
       : null,
     maxContextChars: o.maxContextChars,
     allowUnscanned: o.allowUnscanned,
+    events: eventQueues,
+    deliverEvents: o.n8n,
     scanConcurrency: 2,
     aiConcurrency: 2,
   });
-  return { handle, close: () => handle.close() };
+  return {
+    handle,
+    close: async () => {
+      await handle.close();
+      await eventQueues?.close();
+    },
+  };
 }
 
 /** Environment the app was booted with (workers must use the same queue prefix and storage). */
 const envs = new WeakMap<INestApplication, Env>();
 export const envOf = (app: INestApplication) => envs.get(app)!;
+
+// ---- Client portal & automation helpers ----
+export interface PortalSession {
+  agent: ReturnType<typeof request.agent>;
+  csrf: string;
+  email: string;
+  res: request.Response;
+}
+
+/** Staff invites a portal user for `clientId`; the client accepts and signs in. */
+export async function portalUser(
+  app: INestApplication,
+  staff: { agent: Member['agent']; csrf: string },
+  organizationSlug: string,
+  clientId: string,
+  email = uniqueEmail('client'),
+  password = PASSWORD,
+): Promise<PortalSession> {
+  const inv = await post(staff, `/v1/clients/${clientId}/portal-invitations`, {
+    email,
+    name: 'Client Person',
+  });
+  if (inv.status !== 201)
+    throw new Error(`portal invite failed: ${inv.status} ${JSON.stringify(inv.body)}`);
+  await request(app.getHttpServer())
+    .post('/v1/portal/auth/accept-invitation')
+    .send({ token: inv.body.token, name: 'Client Person', password })
+    .expect(201);
+  return portalLogin(app, organizationSlug, email, password);
+}
+
+export async function portalLogin(
+  app: INestApplication,
+  organizationSlug: string,
+  email: string,
+  password = PASSWORD,
+): Promise<PortalSession> {
+  const agent = request.agent(app.getHttpServer());
+  const res = await agent.post('/v1/portal/auth/login').send({ organizationSlug, email, password });
+  return { agent, csrf: res.body?.csrfToken as string, email, res };
+}
+
+export const portalPost = (c: PortalSession, url: string, body: object = {}) =>
+  c.agent.post(url).set('x-csrf-token', c.csrf).send(body);
+
+/** Value of a cookie held by an agent (to test that one principal's cookie can't stand in for another's). */
+export const cookieValue = (agent: ReturnType<typeof request.agent>, name: string) =>
+  agent.jar.getCookie(name, { path: '/', domain: '127.0.0.1', script: false, secure: false })
+    ?.value;
+
+/** Creates a service token as `staff` (needs workflow:manage) and returns the secret. */
+export async function createServiceToken(
+  staff: { agent: Member['agent']; csrf: string },
+  scopes: string[],
+  extra: object = {},
+) {
+  const res = await post(staff, '/v1/service-tokens', { name: 'n8n test', scopes, ...extra });
+  if (res.status !== 201)
+    throw new Error(`service token failed: ${res.status} ${JSON.stringify(res.body)}`);
+  return { token: res.body.token as string, id: res.body.id as string };
+}
+
+export const bearer = (app: INestApplication, token: string) => ({
+  get: (url: string) =>
+    request(app.getHttpServer()).get(url).set('authorization', `Bearer ${token}`),
+  post: (url: string, body: object = {}, headers: Record<string, string> = {}) =>
+    request(app.getHttpServer())
+      .post(url)
+      .set('authorization', `Bearer ${token}`)
+      .set(headers)
+      .send(body),
+});
+
+export interface N8nRequest {
+  path: string;
+  headers: Record<string, string | string[] | undefined>;
+  raw: string;
+  body: {
+    id?: string;
+    event: string;
+    organizationId: string;
+    occurredAt: string;
+    data: Record<string, unknown>;
+  };
+}
+
+/** A stand-in for the n8n webhook that receives workflow events. */
+export async function startFakeN8n() {
+  const requests: N8nRequest[] = [];
+  const statuses: number[] = [];
+  const server: HttpServer = createHttpServer((req, res) => {
+    let raw = '';
+    req.on('data', (c) => (raw += c));
+    req.on('end', () => {
+      requests.push({
+        path: req.url ?? '',
+        headers: req.headers,
+        raw,
+        body: JSON.parse(raw || '{}'),
+      });
+      res.writeHead(statuses.shift() ?? 200);
+      res.end('{}');
+    });
+  });
+  await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+  return {
+    url: `http://127.0.0.1:${(server.address() as { port: number }).port}/webhook/assar`,
+    requests,
+    /** The next responses use these status codes in order, then 200. */
+    respondWith: (...codes: number[]) => void statuses.push(...codes),
+    reset: () => {
+      requests.length = 0;
+      statuses.length = 0;
+    },
+    close: () => new Promise<void>((r) => server.close(() => r())),
+  };
+}
+
+export async function waitUntil<T>(
+  read: () => Promise<T> | T,
+  done: (v: T) => boolean,
+  timeoutMs = 15_000,
+): Promise<T> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const v = await read();
+    if (done(v)) return v;
+    if (Date.now() > deadline) throw new Error(`timed out; last: ${JSON.stringify(v)}`);
+    await new Promise((r) => setTimeout(r, 25));
+  }
+}

@@ -1,0 +1,130 @@
+{
+  "name": "Assar: notify when an AI draft is ready",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "assar/ai-output-ready",
+        "authentication": "headerAuth",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "eb91f194-0920-5f76-97aa-d0c9668a182e",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0],
+      "webhookId": "1476a7c0-660a-5d70-a5e3-3700de41ba19",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "assar-webhook-token",
+          "name": "Assar webhook token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "adf89d6c-abce-5322-9e71-4c71dc7993f7",
+              "name": "apiUrl",
+              "value": "https://assar-api.example.com/v1",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "b73f27f6-6eac-5ee3-8c87-7c4740c48e4a",
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [220, 0],
+      "notes": "Edit apiUrl to your Assar API base URL (including /v1).",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Tell the person who asked. The notification only links to the draft; opening it still requires access.\nconst event = $('Webhook').first().json.body;\nreturn [{\n  json: {\n    recipientUserId: event.data.requestedBy,\n    title: 'An AI draft is ready for review',\n    body: 'The draft is unverified until a lawyer reviews and approves it.',\n    link: { type: 'ai_output', id: event.data.outputId },\n    dedupeKey: `ai-ready-${event.data.outputId}`,\n  },\n}];"
+      },
+      "id": "2e80e99b-41d7-564a-9043-8376a1a335e8",
+      "name": "Build notification",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [440, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').first().json.apiUrl + '/automation/notifications' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {},
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ recipientUserId: $json.recipientUserId, title: $json.title, body: $json.body, link: $json.link, dedupeKey: $json.dedupeKey }) }}"
+      },
+      "id": "59911670-b9a5-5436-842f-943040f28927",
+      "name": "Create notification",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [660, 0],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "assar-automation-token",
+          "name": "Assar automation token"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "Build notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build notification": {
+      "main": [
+        [
+          {
+            "node": "Create notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "tags": [],
+  "meta": {
+    "templateCredsSetupCompleted": false
+  }
+}

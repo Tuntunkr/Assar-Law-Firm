@@ -1,0 +1,182 @@
+{
+  "name": "Assar: deadline and task reminders",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 1
+            }
+          ]
+        }
+      },
+      "id": "ab3157f6-cdd5-599f-938c-db010b14308e",
+      "name": "Schedule",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "b7b79e26-d239-59fd-8e74-d4f38746bf52",
+              "name": "apiUrl",
+              "value": "https://assar-api.example.com/v1",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "ca5a465a-6a92-5402-a3f4-1e3be2644ae2",
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [220, 0],
+      "notes": "Edit apiUrl to your Assar API base URL (including /v1).",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $('Config').first().json.apiUrl + '/automation/reminders/due?windowHours=24' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "c52c3c80-4b69-5da9-944e-39e98c92f393",
+      "name": "Get due items",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, 0],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "assar-automation-token",
+          "name": "Assar automation token"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "items",
+        "options": {}
+      },
+      "id": "28dbe057-c831-5ed5-8fe9-9e4d1d40b574",
+      "name": "One per item",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [660, 0]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// dedupeKey is stable per item, person and day, so running hourly never sends the same reminder twice.\nconst i = $input.item.json;\nreturn {\n  json: {\n    recipientUserId: i.recipientUserId,\n    title: `Reminder: ${i.title}`.slice(0, 200),\n    body: `Due ${new Date(i.dueAt).toUTCString()}`,\n    link: { type: i.kind, id: i.itemId },\n    dedupeKey: i.dedupeKey,\n  },\n};"
+      },
+      "id": "2c0f3824-8db7-59f1-9dd4-fcf55af918be",
+      "name": "Build notification",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [880, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').first().json.apiUrl + '/automation/notifications' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {},
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ recipientUserId: $json.recipientUserId, title: $json.title, body: $json.body, link: $json.link, dedupeKey: $json.dedupeKey }) }}"
+      },
+      "id": "e7effe8b-1192-5cd1-b308-206bf67d6af9",
+      "name": "Create notification",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1100, 0],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "assar-automation-token",
+          "name": "Assar automation token"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    }
+  ],
+  "connections": {
+    "Schedule": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "Get due items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get due items": {
+      "main": [
+        [
+          {
+            "node": "One per item",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "One per item": {
+      "main": [
+        [
+          {
+            "node": "Build notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build notification": {
+      "main": [
+        [
+          {
+            "node": "Create notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "tags": [],
+  "meta": {
+    "templateCredsSetupCompleted": false
+  }
+}

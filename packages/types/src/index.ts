@@ -22,6 +22,7 @@ export const PERMISSIONS = [
   'billing:write',
   'audit:read',
   'workflow:manage',
+  'portal:manage',
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 
@@ -89,6 +90,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'calendar:write',
     'ai:use',
     'ai:approve',
+    'portal:manage',
   ],
   paralegal: [
     'client:read',
@@ -146,3 +148,65 @@ export const PARTY_ROLES = [
 export type PartyRole = (typeof PARTY_ROLES)[number];
 
 export type ConflictMatchType = 'exact' | 'similar';
+
+/** Scopes a workflow-automation service token can hold. Each maps to specific /v1/automation endpoints. */
+export const SERVICE_SCOPES = [
+  'reminders:read',
+  'notifications:write',
+  'tasks:write',
+  'matters:read',
+  'reports:read',
+] as const;
+export type ServiceScope = (typeof SERVICE_SCOPES)[number];
+
+export const WORKFLOW_EVENTS = [
+  'matter.created',
+  'document.scan_clean',
+  'ai.output_ready',
+] as const;
+export type WorkflowEventName = (typeof WORKFLOW_EVENTS)[number];
+
+export type ActorType = 'staff' | 'client' | 'service' | 'system';
+
+// ---- Client portal DTOs (what a client may ever see) ----
+export interface PortalMe {
+  clientUser: { id: string; name: string; email: string };
+  client: { id: string; name: string };
+  organization: { name: string; slug: string };
+  csrfToken: string;
+}
+export interface PortalMatter {
+  id: string;
+  matterNumber: string;
+  title: string;
+  practiceArea: string;
+  status: string;
+  /** Status message written for the client by the firm. */
+  note: string | null;
+  openedAt: string;
+  closedAt: string | null;
+}
+export interface PortalDocument {
+  id: string;
+  matterId: string;
+  title: string;
+  /** Only versions the firm has shared. */
+  versions: {
+    version: number;
+    filename: string;
+    contentType: string;
+    sizeBytes: number;
+    sharedAt: string;
+  }[];
+}
+export interface PortalAiOutput {
+  id: string;
+  matterId: string;
+  task: string;
+  title: string;
+  /** The reviewer's edited text when present, otherwise the approved text. */
+  body: string;
+  points: { label: string; text: string }[];
+  label: string;
+  approvedAt: string;
+}

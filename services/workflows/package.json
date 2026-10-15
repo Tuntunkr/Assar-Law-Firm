@@ -1,0 +1,21 @@
+{
+  "name": "@assar/workflows",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Version-controlled n8n workflow definitions. They call the Assar API only through /v1/automation with a scoped service token.",
+  "scripts": {
+    "build": "echo \"workflows are JSON; nothing to build\"",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint --config ../../eslint.config.mjs test",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@assar/validation": "workspace:*",
+    "@assar/types": "workspace:*"
+  },
+  "devDependencies": {
+    "@assar/config": "workspace:*",
+    "@assar/jobs": "workspace:*"
+  }
+}

@@ -26,7 +26,7 @@ export class IdempotencyInterceptor implements NestInterceptor {
     const http = ctx.switchToHttp();
     const req = http.getRequest<AppRequest>();
     const res = http.getResponse<Response>();
-    const orgId = req.auth?.organizationId;
+    const orgId = req.auth?.organizationId ?? req.service?.organizationId;
     const key = req.header('idempotency-key');
     if (!orgId) throw new ApiError(401, 'UNAUTHENTICATED', 'Authentication required');
     if (!key && opts.optional) return next.handle();

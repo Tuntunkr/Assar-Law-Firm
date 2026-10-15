@@ -1,5 +1,12 @@
 import { z } from 'zod';
-import { AI_TASKS, CLIENT_TYPES, MATTER_STATUSES, PARTY_ROLES, PRACTICE_AREAS } from '@assar/types';
+import {
+  AI_TASKS,
+  CLIENT_TYPES,
+  MATTER_STATUSES,
+  PARTY_ROLES,
+  PRACTICE_AREAS,
+  SERVICE_SCOPES,
+} from '@assar/types';
 
 export const emailSchema = z.string().trim().toLowerCase().email().max(254);
 
@@ -311,3 +318,60 @@ export const approveAiOutputSchema = z.object({
 });
 export const rejectAiOutputSchema = z.object({ reason: z.string().trim().min(3).max(2000) });
 export const editAiOutputSchema = z.object({ text: z.string().trim().min(1).max(100_000) });
+
+// ---- Client portal ----
+export const portalLoginSchema = z.object({
+  /** The firm's identifier (organization slug), because the same e-mail can belong to several firms. */
+  organizationSlug: z.string().trim().toLowerCase().min(3).max(60),
+  email: emailSchema,
+  password: z.string().min(1).max(256),
+});
+export const portalAcceptInvitationSchema = z.object({
+  token: z.string().min(20).max(200),
+  name: z.string().trim().min(2).max(100),
+  password: passwordSchema,
+});
+export const createPortalInvitationSchema = z.object({
+  email: emailSchema,
+  name: z.string().trim().min(2).max(100).optional(),
+});
+export const setMatterPortalSchema = z.object({
+  visible: z.boolean(),
+  /** Client-facing status message. `null` clears it; omit to leave unchanged. */
+  note: z.string().trim().max(1000).nullable().optional(),
+});
+export const setSharedSchema = z.object({ shared: z.boolean() });
+export const updatePortalUserSchema = z.object({ status: z.enum(['active', 'disabled']) });
+
+// ---- Workflow automation ----
+export const createServiceTokenSchema = z.object({
+  name: z.string().trim().min(3).max(100),
+  scopes: z.array(z.enum(SERVICE_SCOPES)).min(1).max(SERVICE_SCOPES.length),
+  expiresInDays: z.number().int().min(1).max(365).optional(),
+});
+export const notificationListQuerySchema = paginationSchema.extend({
+  unread: z
+    .enum(['true', 'false'])
+    .transform((v) => v === 'true')
+    .optional(),
+});
+export const remindersQuerySchema = z.object({
+  windowHours: z.coerce.number().int().min(1).max(168).default(24),
+});
+const LINK_TYPES = ['task', 'event', 'matter', 'ai_output', 'document'] as const;
+export const automationNotificationSchema = z.object({
+  recipientUserId: objectIdSchema,
+  title: z.string().trim().min(2).max(200),
+  body: z.string().trim().max(1000).optional(),
+  link: z.object({ type: z.enum(LINK_TYPES), id: objectIdSchema }).optional(),
+  /** Makes the call idempotent: the same key never creates a second notification. */
+  dedupeKey: z.string().trim().min(8).max(200),
+});
+export const automationTaskSchema = z.object({
+  title: z.string().trim().min(2).max(200),
+  description: z.string().trim().max(5000).optional(),
+  matterId: objectIdSchema.optional(),
+  assigneeId: objectIdSchema.optional(),
+  priority: z.enum(['low', 'normal', 'high']).default('normal'),
+  dueAt: isoDate.optional(),
+});

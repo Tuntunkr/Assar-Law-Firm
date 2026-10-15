@@ -2,8 +2,16 @@ import { UnrecoverableError, Worker, type Job } from 'bullmq';
 import { aiJobs, audit, documentVersions } from '@assar/database';
 import type { ScanProvider, StorageService } from '@assar/storage';
 import { createAiProcessor } from './ai.processor.js';
+import { createEventsProcessor } from './events.processor.js';
 import type { GrokClient } from './grok.js';
-import { QUEUE_NAMES, type AiJobData, type JobLogger, type ScanJobData } from './names.js';
+import {
+  QUEUE_NAMES,
+  type AiJobData,
+  type EventSink,
+  type JobLogger,
+  type ScanJobData,
+  type WorkflowEventData,
+} from './names.js';
 import { parseRedisUrl } from './redis.js';
 import { createScanProcessor } from './scan.processor.js';
 
@@ -15,6 +23,10 @@ export interface WorkersConfig {
   scanProvider: ScanProvider;
   /** Omit to run without AI (AI jobs then stay queued; the API should have AI disabled). */
   grok?: GrokClient | null;
+  /** Where processors announce events (e.g. a JobQueues with events enabled). */
+  events?: EventSink;
+  /** Deliver queued workflow events to the n8n webhooks under this base URL. Omit to leave the events queue unprocessed. */
+  deliverEvents?: { baseUrl: string; secret: string; timeoutMs?: number };
   scanConcurrency?: number;
   aiConcurrency?: number;
   maxContextChars?: number;
@@ -27,7 +39,9 @@ export interface WorkersConfig {
 export interface WorkerStats {
   scan: { completed: number; failed: number };
   ai: { completed: number; failed: number };
+  events: { completed: number; failed: number };
   aiEnabled: boolean;
+  eventsEnabled: boolean;
   paused: boolean;
 }
 
@@ -46,12 +60,21 @@ export function startWorkers(cfg: WorkersConfig): WorkerHandle {
     prefix: cfg.prefix ?? 'bull',
     stalledInterval: cfg.stalledIntervalMs ?? 30_000,
   };
-  const counters = { scan: { completed: 0, failed: 0 }, ai: { completed: 0, failed: 0 } };
+  const counters = {
+    scan: { completed: 0, failed: 0 },
+    ai: { completed: 0, failed: 0 },
+    events: { completed: 0, failed: 0 },
+  };
   let paused = false;
 
   const scanWorker = new Worker<ScanJobData>(
     QUEUE_NAMES.scan,
-    createScanProcessor({ storage: cfg.storage, provider: cfg.scanProvider, logger: cfg.logger }),
+    createScanProcessor({
+      storage: cfg.storage,
+      provider: cfg.scanProvider,
+      logger: cfg.logger,
+      events: cfg.events,
+    }),
     { ...common, concurrency: cfg.scanConcurrency ?? 4 },
   );
 
@@ -65,12 +88,21 @@ export function startWorkers(cfg: WorkersConfig): WorkerHandle {
           maxContextChars: cfg.maxContextChars ?? 120_000,
           maxExtractBytes: cfg.maxExtractBytes ?? 25 * 1024 * 1024,
           allowUnscanned: cfg.allowUnscanned ?? false,
+          events: cfg.events,
         }),
         { ...common, concurrency: cfg.aiConcurrency ?? 2 },
       )
     : null;
 
-  const wire = (w: Worker, kind: 'scan' | 'ai') => {
+  const eventsWorker = cfg.deliverEvents
+    ? new Worker<WorkflowEventData>(
+        QUEUE_NAMES.events,
+        createEventsProcessor({ ...cfg.deliverEvents, logger: cfg.logger }),
+        { ...common, concurrency: 4 },
+      )
+    : null;
+
+  const wire = (w: Worker, kind: 'scan' | 'ai' | 'events') => {
     w.on('completed', () => counters[kind].completed++);
     w.on('failed', (job, err) => {
       counters[kind].failed++;
@@ -80,12 +112,18 @@ export function startWorkers(cfg: WorkersConfig): WorkerHandle {
   };
   wire(scanWorker, 'scan');
   if (aiWorker) wire(aiWorker, 'ai');
+  if (eventsWorker) wire(eventsWorker, 'events');
 
   /**
    * Safety net: if BullMQ gives up on a job that our processor never got to finish (e.g. the worker
    * crashed repeatedly and the job exceeded its stall limit), make the database say so.
    */
-  async function markDeadIfStalled(kind: 'scan' | 'ai', job: Job | undefined, err: Error) {
+  async function markDeadIfStalled(
+    kind: 'scan' | 'ai' | 'events',
+    job: Job | undefined,
+    err: Error,
+  ) {
+    if (kind === 'events') return; // events have no database record to repair
     if (!job || err instanceof UnrecoverableError || !/stalled/i.test(err.message)) return;
     try {
       if (kind === 'ai') {
@@ -122,20 +160,23 @@ export function startWorkers(cfg: WorkersConfig): WorkerHandle {
     stats: () => ({
       scan: { ...counters.scan },
       ai: { ...counters.ai },
+      events: { ...counters.events },
       aiEnabled: !!aiWorker,
+      eventsEnabled: !!eventsWorker,
       paused,
     }),
     async pause() {
       paused = true;
-      await Promise.all([scanWorker.pause(), aiWorker?.pause()]);
+      await Promise.all([scanWorker.pause(), aiWorker?.pause(), eventsWorker?.pause()]);
     },
     resume() {
       paused = false;
       scanWorker.resume();
       aiWorker?.resume();
+      eventsWorker?.resume();
     },
     async close() {
-      await Promise.all([scanWorker.close(), aiWorker?.close()]);
+      await Promise.all([scanWorker.close(), aiWorker?.close(), eventsWorker?.close()]);
     },
   };
 }

@@ -1,0 +1,173 @@
+{
+  "name": "Assar: matter onboarding checklist",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "assar/matter-created",
+        "authentication": "headerAuth",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "cd408fec-e8d1-53a0-a582-1370393e3e2e",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0],
+      "webhookId": "915e7d28-5ad3-54c9-b7e5-3cde31974aa5",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "assar-webhook-token",
+          "name": "Assar webhook token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "2f466571-4e00-5035-bae2-c99d8f9db87f",
+              "name": "apiUrl",
+              "value": "https://assar-api.example.com/v1",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "5a3e1df1-857f-5818-8197-c53c057add18",
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [220, 0],
+      "notes": "Edit apiUrl to your Assar API base URL (including /v1).",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $('Config').first().json.apiUrl + '/automation/matters/' + $('Webhook').first().json.body.data.matterId + '/context' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "41376da0-1a1e-5122-87b1-9cbaafa01b98",
+      "name": "Get matter context",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, 0],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "assar-automation-token",
+          "name": "Assar automation token"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// One task per step, assigned to the lead attorney (or whoever opened the matter).\n// The API only accepts the assignment if that person can see the matter.\nconst event = $('Webhook').first().json.body;\nconst ctx = $input.first().json;\nconst assigneeId = ctx.leadAttorneyId || ctx.createdBy;\nconst due = (days) => new Date(Date.now() + days * 86400000).toISOString();\nconst steps = [\n  ['Confirm the conflict check result', 'Record the outcome of the conflict check for this new matter.', 1],\n  ['Send the engagement letter', 'Prepare and send the engagement letter for attorney review.', 3],\n  ['Collect initial client documents', 'Request and upload the documents needed to start the matter.', 7],\n  ['Add key dates to the calendar', 'Enter hearings and deadlines exactly as they appear in the source documents.', 7],\n];\nreturn steps.map(([title, description, days], i) => ({\n  json: { title, description, matterId: ctx.id, assigneeId, dueAt: due(days), key: `matter-onboarding-${event.id}-${i}` },\n}));"
+      },
+      "id": "87cbda13-4d29-55ee-8878-00d89c76c025",
+      "name": "Plan checklist",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [660, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').first().json.apiUrl + '/automation/tasks' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {},
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ title: $json.title, description: $json.description, matterId: $json.matterId, assigneeId: $json.assigneeId, dueAt: $json.dueAt, priority: 'normal' }) }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Idempotency-Key",
+              "value": "={{ $json.key }}"
+            }
+          ]
+        }
+      },
+      "id": "e10a3dcf-3f63-5959-92c7-ff8ebc6df506",
+      "name": "Create task",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [880, 0],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "assar-automation-token",
+          "name": "Assar automation token"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "Get matter context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get matter context": {
+      "main": [
+        [
+          {
+            "node": "Plan checklist",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Plan checklist": {
+      "main": [
+        [
+          {
+            "node": "Create task",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "tags": [],
+  "meta": {
+    "templateCredsSetupCompleted": false
+  }
+}

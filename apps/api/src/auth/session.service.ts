@@ -46,7 +46,7 @@ export class SessionService {
   async validate(raw: string): Promise<AuthContext | null> {
     const tokenHash = sha256(raw);
     const s = await sessions.findByTokenHash(tokenHash);
-    if (!s) return null;
+    if (!s || s.principal === 'client') return null; // portal sessions never authenticate staff routes
     const now = new Date();
     if (s.idleExpiresAt < now || s.absoluteExpiresAt < now) {
       await sessions.deleteByTokenHash(tokenHash);

@@ -1,5 +1,5 @@
 import type { Request } from 'express';
-import type { Role } from '@assar/types';
+import type { Role, ServiceScope } from '@assar/types';
 
 export interface AuthContext {
   userId: string;
@@ -12,4 +12,26 @@ export interface AuthContext {
   mfaEnrollmentRequired: boolean;
 }
 
-export type AppRequest = Request & { id: string; auth?: AuthContext };
+/** A signed-in client-portal user. Every portal query is bound to `clientId`. */
+export interface ClientContext {
+  clientUserId: string;
+  organizationId: string;
+  clientId: string;
+  sessionTokenHash: string;
+  csrfToken: string;
+}
+
+/** An automation service token. It is not a user and has no role: only its scopes. */
+export interface ServiceContext {
+  tokenId: string;
+  organizationId: string;
+  name: string;
+  scopes: ServiceScope[];
+}
+
+export type AppRequest = Request & {
+  id: string;
+  auth?: AuthContext;
+  client?: ClientContext;
+  service?: ServiceContext;
+};

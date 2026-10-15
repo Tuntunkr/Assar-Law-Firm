@@ -66,6 +66,11 @@ export async function startWorkerApp(
   if (!grok)
     logger.warn({}, 'GROK_API_KEY is not set: AI jobs will not be processed by this worker');
 
+  const queues = new JobQueues({
+    redisUrl: env.REDIS_URL,
+    prefix: env.QUEUE_PREFIX,
+    eventsEnabled: !!env.N8N_WEBHOOK_BASE_URL,
+  });
   const workers = startWorkers({
     redisUrl: env.REDIS_URL,
     prefix: env.QUEUE_PREFIX,
@@ -76,6 +81,10 @@ export async function startWorkerApp(
         ? new ClamAvScanProvider(env.CLAMAV_HOST, env.CLAMAV_PORT)
         : new DisabledScanProvider(),
     grok,
+    events: queues,
+    deliverEvents: env.N8N_WEBHOOK_BASE_URL
+      ? { baseUrl: env.N8N_WEBHOOK_BASE_URL, secret: env.N8N_WEBHOOK_SECRET! }
+      : undefined,
     scanConcurrency: env.SCAN_CONCURRENCY,
     aiConcurrency: env.AI_CONCURRENCY,
     maxContextChars: env.AI_MAX_CONTEXT_CHARS,
@@ -85,7 +94,6 @@ export async function startWorkerApp(
 
   const redis = createRedis(env.REDIS_URL);
   redis.on('error', () => undefined);
-  const queues = new JobQueues({ redisUrl: env.REDIS_URL, prefix: env.QUEUE_PREFIX });
   const heartbeat = startHeartbeat({
     redis,
     prefix: env.QUEUE_PREFIX,

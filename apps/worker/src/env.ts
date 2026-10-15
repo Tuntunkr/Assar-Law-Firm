@@ -44,6 +44,9 @@ const schema = z
     GROK_MODEL: z.string().min(1).optional(),
     GROK_TIMEOUT_MS: z.coerce.number().int().min(1000).default(120_000),
     GROK_MAX_OUTPUT_TOKENS: z.coerce.number().int().min(256).default(4096),
+    // --- Workflow automation (n8n). Leave N8N_WEBHOOK_BASE_URL unset to disable event delivery. ---
+    N8N_WEBHOOK_BASE_URL: z.string().url().optional(),
+    N8N_WEBHOOK_SECRET: z.string().min(16).optional(),
     AI_MAX_CONTEXT_CHARS: z.coerce.number().int().min(1000).default(120_000),
     AI_MAX_EXTRACT_BYTES: z.coerce
       .number()
@@ -54,6 +57,10 @@ const schema = z
   .superRefine((e, ctx) => {
     const issue = (path: string, message: string) =>
       ctx.addIssue({ code: 'custom', path: [path], message });
+    if (e.N8N_WEBHOOK_BASE_URL && !e.N8N_WEBHOOK_SECRET)
+      issue('N8N_WEBHOOK_SECRET', 'Required (min 16 chars) when N8N_WEBHOOK_BASE_URL is set');
+    if (e.N8N_WEBHOOK_BASE_URL?.startsWith('http://') && e.NODE_ENV === 'production')
+      issue('N8N_WEBHOOK_BASE_URL', 'Use https:// in production');
     if (e.GROK_API_KEY && !e.GROK_MODEL)
       issue('GROK_MODEL', 'Required when GROK_API_KEY is set (no model is assumed)');
     if (e.STORAGE_DRIVER === 'local' && !e.SESSION_SECRET)

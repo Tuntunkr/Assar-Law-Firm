@@ -178,6 +178,7 @@ export class OrganizationsService {
         id: String(a._id),
         action: a.action,
         actorId: a.actorId ? String(a.actorId) : null,
+        actorType: a.actorType ?? 'staff',
         targetType: a.targetType,
         targetId: a.targetId,
         ip: a.ip,
