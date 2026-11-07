@@ -42,7 +42,7 @@ export function ReportsPage() {
         description="Billing performance and time worked."
         actions={
           <a
-            className="inline-flex h-10 items-center rounded-lg border border-navy-200 bg-white px-4 text-sm font-semibold text-navy-900 hover:bg-navy-50"
+            className="inline-flex h-11 items-center rounded-lg border border-navy-200 bg-white px-4 text-sm font-semibold text-navy-900 hover:bg-navy-50"
             href={client.timeReportCsvUrl({ ...q, groupBy })}
           >
             Export time CSV

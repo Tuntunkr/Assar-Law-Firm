@@ -14,7 +14,7 @@ const variants: Record<Variant, string> = {
   secondary: 'border border-navy-200 bg-white text-navy-900 hover:bg-navy-50',
   ghost: 'text-navy-800 hover:bg-navy-50',
 };
-const sizes: Record<Size, string> = { md: 'h-10 px-4 text-sm', lg: 'h-12 px-6 text-base' };
+const sizes: Record<Size, string> = { md: 'h-11 px-4 text-sm', lg: 'h-12 px-6 text-base' };
 
 interface Shared {
   variant?: Variant;
