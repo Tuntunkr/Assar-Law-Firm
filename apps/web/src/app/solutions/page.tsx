@@ -6,15 +6,16 @@ import { practiceAreas } from '@/content/services';
 
 export const metadata: Metadata = {
   title: 'Solutions by Practice Area',
-  description: 'How Assar supports different legal practice areas.',
+  description:
+    'Examples of records the software can store. Not a list of the firm’s practice areas.',
 };
 
 export default function Page() {
   return (
     <>
       <PageHero
-        title="Solutions by practice area"
-        summary="Common workflows for the areas of law your firm handles."
+        title="Records the software can hold"
+        summary="These are examples of files the software can store. They are not a list of Assar Law Firm’s practice areas. No practice area, office, or result is published here."
       />
       <Section title="Practice areas">
         <FeatureGrid items={practiceAreas} />

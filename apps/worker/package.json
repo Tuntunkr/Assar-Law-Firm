@@ -15,6 +15,7 @@
     "@assar/database": "workspace:*",
     "@assar/jobs": "workspace:*",
     "@assar/storage": "workspace:*",
+    "@assar/types": "workspace:*",
     "pino": "^10.4.0",
     "zod": "^3.23.8"
   },

@@ -37,6 +37,13 @@ export interface CourtDto {
   courtroom: string | null;
   jurisdiction: string | null;
   filedOn: string | null;
+  cnr?: string | null;
+  officialUrl?: string | null;
+  trackingSource?: 'manual';
+  freshness?: 'unverified' | 'verified_manual';
+  stale?: boolean;
+  verifiedAt?: string | null;
+  lookup?: 'not_performed';
 }
 export interface MatterDto {
   id: string;
@@ -112,6 +119,13 @@ export interface EventDto {
   location: string | null;
   attendeeIds: string[];
   status: 'scheduled' | 'completed' | 'cancelled';
+  source?: 'manual';
+  outcome?: {
+    result: string;
+    notes: string;
+    nextHearingOn: string | null;
+    reviewStatus: 'draft' | 'reviewed';
+  } | null;
 }
 export interface TextStatusDto {
   status: 'pending' | 'processing' | 'done' | 'failed';
@@ -461,6 +475,19 @@ export function createStaffClient(options: ClientOptions) {
     matter: (id: string) => get<MatterDto>(`/matters/${id}`),
     createMatter: (b: Record<string, unknown>) => post<MatterDto>('/matters', b, idem()),
     updateMatter: (id: string, b: Record<string, unknown>) => patch<MatterDto>(`/matters/${id}`, b),
+    verifyCourt: (id: string) => post<MatterDto>(`/matters/${id}/court/verify`, {}),
+    courtProvider: () =>
+      get<{ status: string; lookup: string; detail: string }>('/courts/provider'),
+    deadlines: () => get<{ data: Record<string, unknown>[] }>('/deadlines'),
+    createDeadline: (b: Record<string, unknown>) => post('/deadlines', b),
+    submitDeadline: (id: string) => post(`/deadlines/${id}/submit`, {}),
+    approveDeadline: (id: string) => post(`/deadlines/${id}/approve`, {}),
+    outbox: () => get<{ data: Record<string, unknown>[] }>('/outbox'),
+    createOutbox: (b: Record<string, unknown>) => post('/outbox', b),
+    approveOutbox: (id: string) => post(`/outbox/${id}/approve`, {}),
+    recordOutcome: (id: string, b: Record<string, unknown>) =>
+      post(`/calendar/events/${id}/outcome`, b),
+    reviewOutcome: (id: string) => post(`/calendar/events/${id}/outcome/review`, {}),
     parties: (id: string) => get<{ data: PartyDto[] }>(`/matters/${id}/parties`),
     addParty: (id: string, b: Record<string, unknown>) =>
       post<PartyDto>(`/matters/${id}/parties`, b),

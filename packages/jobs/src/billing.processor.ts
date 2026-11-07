@@ -1,5 +1,9 @@
 import type { Job } from 'bullmq';
-import { OrganizationModel, dispatchInvoiceReminders } from '@assar/database';
+import {
+  OrganizationModel,
+  dispatchInvoiceReminders,
+  dispatchPracticeReminders,
+} from '@assar/database';
 import type { JobLogger } from './names.js';
 
 export interface BillingProcessorDeps {
@@ -13,8 +17,13 @@ export interface BillingProcessorDeps {
  */
 export function createBillingProcessor(deps: BillingProcessorDeps) {
   return async (
-    _job?: Job,
+    job?: Job,
   ): Promise<{ firms: number; invoices: number; notified: number; failed: number }> => {
+    if (job?.name === 'practice-reminders') {
+      const r = await dispatchPracticeReminders();
+      deps.logger.info(r, 'practice reminder sweep finished');
+      return { firms: 0, invoices: r.deadlines, notified: r.notified, failed: 0 };
+    }
     let firms = 0;
     let invoices = 0;
     let notified = 0;

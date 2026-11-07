@@ -11,7 +11,9 @@ import { CalendarPage } from './pages/CalendarPage';
 import { ClientDetailPage } from './pages/ClientDetailPage';
 import { ClientsPage } from './pages/ClientsPage';
 import { ConflictsPage } from './pages/ConflictsPage';
+import { DeadlinesPage } from './pages/DeadlinesPage';
 import { DocumentsPage } from './pages/DocumentsPage';
+import { OutboxPage } from './pages/OutboxPage';
 import { InvoiceDetailPage } from './pages/InvoiceDetailPage';
 import { InvoicesPage } from './pages/InvoicesPage';
 import { LoginPage } from './pages/LoginPage';
@@ -58,6 +60,8 @@ export function AppRoutes() {
           <Route path="templates" element={guard('document:read', <TemplatesPage />)} />
           <Route path="tasks" element={guard('task:write', <TasksPage />)} />
           <Route path="calendar" element={guard('calendar:write', <CalendarPage />)} />
+          <Route path="dates" element={guard('matter:read', <DeadlinesPage />)} />
+          <Route path="updates" element={guard('matter:read', <OutboxPage />)} />
           <Route path="ai" element={guard('ai:use', <AiPage />)} />
           <Route path="conflicts" element={guard('conflict:check', <ConflictsPage />)} />
           <Route path="time" element={guard('time:write', <TimePage />)} />

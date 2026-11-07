@@ -228,6 +228,17 @@ export const tasks = {
       runValidators: true,
     }).lean(),
   delete: (organizationId: Id, id: Id) => TaskModel.deleteOne({ _id: id, organizationId }),
+  openAssigneeIds: async (organizationId: Id, matterId: Id) =>
+    (
+      await TaskModel.find({
+        organizationId,
+        matterId,
+        status: { $in: ['todo', 'in_progress'] },
+        assigneeId: { $ne: null },
+      })
+        .select('assigneeId')
+        .lean()
+    ).map((t) => t.assigneeId!),
   async listPage(
     organizationId: Id,
     o: {

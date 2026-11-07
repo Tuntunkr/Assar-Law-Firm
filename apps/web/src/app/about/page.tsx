@@ -20,7 +20,11 @@ export default function Page() {
           Our principles: AI output is always a draft until a lawyer reviews it; clients and staff
           only see what they are authorized to see; and confidential material is handled with care.
         </p>
-        <p>The platform is under active development and being prepared for pilot customers.</p>
+        <p>
+          No office address, advocate roster, or case result is published on this site. Pricing is
+          not published. A public page is not a representation that every court or message provider
+          is connected.
+        </p>
       </Container>
     </>
   );

@@ -147,6 +147,18 @@ export function startWorkers(cfg: WorkersConfig): WorkerHandle {
       .catch((e: Error) =>
         cfg.logger.error({ error: e.message }, 'could not schedule invoice reminders'),
       );
+    void billingQueue
+      .upsertJobScheduler(
+        'practice-reminders-ist',
+        { pattern: '0 8 * * *', tz: 'Asia/Kolkata' },
+        {
+          name: 'practice-reminders',
+          opts: { removeOnComplete: { count: 30 }, removeOnFail: { count: 100 } },
+        },
+      )
+      .catch((e: Error) =>
+        cfg.logger.error({ error: e.message }, 'could not schedule practice reminders'),
+      );
   }
 
   const aiWorker = cfg.grok

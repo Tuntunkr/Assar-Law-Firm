@@ -122,10 +122,14 @@ export const matters = {
       clientId?: string;
       q?: string;
       restrictedVisibleIds: Id[] | 'all';
+      /** When set, the caller sees only these matters (interns). */
+      assignedOnlyIds?: Id[];
     },
   ) {
     const and: Record<string, unknown>[] = [];
-    if (o.restrictedVisibleIds !== 'all') {
+    if (o.assignedOnlyIds) {
+      and.push({ _id: { $in: o.assignedOnlyIds } });
+    } else if (o.restrictedVisibleIds !== 'all') {
       and.push({ $or: [{ restricted: false }, { _id: { $in: o.restrictedVisibleIds } }] });
     }
     if (o.q) {
@@ -164,6 +168,12 @@ export const matterAccess = {
     ),
   has: async (organizationId: Id, matterId: Id, userId: Id) =>
     (await MatterAccessModel.exists({ organizationId, matterId, userId })) !== null,
+  grant: (organizationId: Id, matterId: Id, userId: Id, grantedBy: Id) =>
+    MatterAccessModel.updateOne(
+      { organizationId, matterId, userId },
+      { $setOnInsert: { organizationId, matterId, userId, grantedBy } },
+      { upsert: true },
+    ),
   async replace(organizationId: Id, matterId: Id, userIds: Id[], grantedBy: Id, tx: Tx = {}) {
     await MatterAccessModel.deleteMany({ organizationId, matterId }, tx);
     if (userIds.length > 0) {

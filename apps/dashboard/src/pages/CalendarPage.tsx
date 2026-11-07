@@ -21,7 +21,7 @@ const dayKey = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
 export function CalendarPage() {
-  const { client } = useAuth();
+  const { client, can } = useAuth();
   const act = useAction();
   const [month, setMonth] = useState(
     () => new Date(new Date().getFullYear(), new Date().getMonth(), 1),
@@ -99,9 +99,58 @@ export function CalendarPage() {
                             {e.allDay ? 'All day' : formatTime(e.startsAt)}
                             {e.location ? ` · ${e.location}` : ''}
                           </p>
+                          {e.kind === 'hearing' && (
+                            <p className="text-xs text-navy-700">
+                              {e.outcome
+                                ? `Outcome ${e.outcome.result}, ${e.outcome.reviewStatus}. Next date is a note, not a filing.`
+                                : 'No outcome recorded.'}
+                            </p>
+                          )}
                         </div>
                         <div className="flex items-center gap-2">
                           <StatusPill tone={toneOf(e.kind)}>{e.kind}</StatusPill>
+                          {e.kind === 'hearing' && can('calendar:write') && (
+                            <Button
+                              variant="ghost"
+                              disabled={act.busy}
+                              onClick={async () => {
+                                const notes = window.prompt('Hearing note (typed, not calculated)');
+                                if (!notes) return;
+                                if (
+                                  await act.run(
+                                    () =>
+                                      client.recordOutcome(e.id, {
+                                        result: 'adjourned',
+                                        notes,
+                                      }),
+                                    'Outcome saved as a draft',
+                                  )
+                                )
+                                  state.reload();
+                              }}
+                            >
+                              Record outcome
+                            </Button>
+                          )}
+                          {e.kind === 'hearing' &&
+                            can('hearing:review') &&
+                            e.outcome?.reviewStatus === 'draft' && (
+                              <Button
+                                variant="ghost"
+                                disabled={act.busy}
+                                onClick={async () => {
+                                  if (
+                                    await act.run(
+                                      () => client.reviewOutcome(e.id),
+                                      'Outcome reviewed',
+                                    )
+                                  )
+                                    state.reload();
+                                }}
+                              >
+                                Review
+                              </Button>
+                            )}
                           {e.status === 'scheduled' && (
                             <Button
                               variant="ghost"

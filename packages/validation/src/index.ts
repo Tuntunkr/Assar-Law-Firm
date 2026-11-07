@@ -14,6 +14,9 @@ import {
   PARTY_ROLES,
   PRACTICE_AREAS,
   SERVICE_SCOPES,
+  HEARING_RESULTS,
+  DEADLINE_KINDS,
+  MESSAGE_CHANNELS,
 } from '@assar/types';
 
 export const emailSchema = z.string().trim().toLowerCase().email().max(254);
@@ -70,7 +73,7 @@ export const mfaDisableSchema = z.object({
   code: totpCodeSchema,
 });
 
-const INVITABLE_ROLES = ['admin', 'attorney', 'paralegal', 'billing', 'staff'] as const;
+const INVITABLE_ROLES = ['admin', 'attorney', 'paralegal', 'billing', 'staff', 'intern'] as const;
 export const createInvitationSchema = z.object({
   email: emailSchema,
   role: z.enum(INVITABLE_ROLES),
@@ -128,6 +131,20 @@ export const courtSchema = z.object({
   courtroom: optionalText(100),
   jurisdiction: optionalText(150),
   filedOn: dateOnly.optional(),
+  /** Shape check only. Omitted when blank. Not evidence the case exists. */
+  cnr: z
+    .string()
+    .trim()
+    .toUpperCase()
+    .regex(/^[A-Z0-9]{16}$/, 'CNR must be 16 letters or digits. This checks the shape only.')
+    .optional(),
+  officialUrl: z
+    .string()
+    .trim()
+    .url()
+    .max(500)
+    .refine((u) => u.startsWith('https://'), 'Use an https link')
+    .optional(),
 });
 
 export const createMatterSchema = z.object({
@@ -290,6 +307,47 @@ export const updateEventSchema = z
   .object({ ...eventFields, status: z.enum(['scheduled', 'completed', 'cancelled']) })
   .partial()
   .refine((v) => Object.keys(v).length > 0, 'Provide at least one field');
+
+export const hearingOutcomeSchema = z.object({
+  result: z.enum(HEARING_RESULTS),
+  notes: z.string().trim().min(1).max(5000),
+  nextHearingOn: dateOnly.optional(),
+});
+
+export const deadlineFields = {
+  matterId: objectIdSchema,
+  kind: z.enum(DEADLINE_KINDS),
+  title: z.string().trim().min(2).max(200),
+  /** Why this date was typed. Not a statute and not a model output. */
+  basisNote: z.string().trim().min(2).max(5000),
+  dueOn: dateOnly,
+  reminderDaysBefore: z.array(z.number().int().min(0).max(365)).max(8).default([7, 3, 1, 0]),
+  escalateAfterDays: z.number().int().min(0).max(365).default(1),
+};
+export const createDeadlineSchema = z.object(deadlineFields);
+export const updateDeadlineSchema = z
+  .object(deadlineFields)
+  .partial()
+  .refine((v) => Object.keys(v).length > 0, 'Provide at least one field');
+
+export const outboxDraftSchema = z.object({
+  clientId: objectIdSchema,
+  matterId: objectIdSchema.optional(),
+  channel: z.enum(MESSAGE_CHANNELS),
+  templateLabel: z.string().trim().min(2).max(120),
+  body: z.string().trim().min(2).max(5000),
+  consent: z.object({
+    optedIn: z.literal(true),
+    namesFirm: z.literal(true),
+    note: z.string().trim().max(500).optional(),
+  }),
+});
+
+export const webhookAckSchema = z.object({
+  eventId: z.string().trim().min(8).max(200),
+  outboxId: objectIdSchema,
+  status: z.literal('mock_ack'),
+});
 
 const MAX_RANGE_MS = 366 * 24 * 3600_000;
 export const eventListQuerySchema = paginationSchema

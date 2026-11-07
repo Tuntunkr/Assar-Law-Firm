@@ -25,6 +25,6 @@ export const faqs = [
   },
   {
     q: 'How is pricing set?',
-    a: 'Pricing is being finalized. Book a demo and we will share current options.',
+    a: 'No price is published. A demo request is stored only when a demo inbox is configured. It does not confirm a plan or a tax rate.',
   },
 ];

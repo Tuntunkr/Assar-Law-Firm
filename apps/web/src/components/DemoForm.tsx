@@ -57,7 +57,11 @@ export function DemoForm() {
   }
 
   if (state.kind === 'ok') {
-    return <Alert tone="success">Thanks — your request was received. We will be in touch.</Alert>;
+    return (
+      <Alert tone="success">
+        The server accepted the request. That only happens when a demo inbox is configured.
+      </Alert>
+    );
   }
 
   return (

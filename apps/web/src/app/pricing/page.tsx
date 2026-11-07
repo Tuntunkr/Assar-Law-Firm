@@ -10,7 +10,7 @@ export default function Page() {
     <>
       <PageHero
         title="Pricing"
-        summary="Pricing is being finalized. Book a demo to discuss options for your firm."
+        summary="No price, tax rate, or plan is approved. The figures below are labels only. The demo form reaches a person only when a demo inbox is configured."
         cta={false}
       />
       <Section title="Plans">
@@ -29,7 +29,7 @@ export default function Page() {
               </p>
               <ul className="mt-4 flex-1 space-y-2 text-sm text-navy-700">
                 {p.features.map((f) => (
-                  <li key={f}>✓ {f}</li>
+                  <li key={f}>{f}</li>
                 ))}
               </ul>
               <ButtonLink

@@ -160,6 +160,8 @@ export async function userCanAccessMatter(
     MembershipModel.findOne({ organizationId, userId, status: 'active' }).select('role').lean(),
   ]);
   if (!matter || !membership) return false;
+  if (membership.role === 'intern')
+    return (await MatterAccessModel.exists({ organizationId, matterId, userId })) !== null;
   if (!matter.restricted || membership.role === 'owner') return true;
   return (await MatterAccessModel.exists({ organizationId, matterId, userId })) !== null;
 }

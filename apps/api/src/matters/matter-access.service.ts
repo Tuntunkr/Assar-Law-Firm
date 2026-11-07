@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import {
   matterAccess,
+  matterIds,
   matterVisibility,
   matters,
   memberships,
@@ -30,6 +31,20 @@ export class MatterAccessService {
   async load(auth: AuthContext, id: string, req: Req): Promise<MatterRow> {
     const matter = await matters.findById(auth.organizationId, id);
     if (!matter) throw new ApiError(404, 'NOT_FOUND', 'Matter not found');
+    if (auth.role === 'intern') {
+      if (!(await matterAccess.has(auth.organizationId, id, auth.userId)))
+        throw new ApiError(404, 'NOT_FOUND', 'Matter not found');
+      await this.audit.record({
+        organizationId: auth.organizationId,
+        actorId: auth.userId,
+        actorType: 'staff',
+        action: 'intern.matter_opened',
+        targetType: 'matter',
+        targetId: id,
+        req,
+      });
+      return matter;
+    }
     if (!matter.restricted) return matter;
 
     if (await matterAccess.has(auth.organizationId, id, auth.userId)) return matter;
@@ -65,6 +80,13 @@ export class MatterAccessService {
    * items on these matters are excluded, items with no matter are kept.
    */
   async hiddenMatterIds(auth: AuthContext): Promise<string[]> {
+    if (auth.role === 'intern') {
+      const all = (await matterIds.all(auth.organizationId)).map(String);
+      const mine = new Set(
+        (await matterAccess.matterIdsFor(auth.organizationId, auth.userId)).map(String),
+      );
+      return all.filter((id) => !mine.has(id));
+    }
     if (auth.role === 'owner') return [];
     const restricted = await matterVisibility.restrictedIds(auth.organizationId);
     if (restricted.length === 0) return [];

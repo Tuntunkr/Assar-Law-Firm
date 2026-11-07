@@ -1,8 +1,8 @@
 export const site = {
   name: 'Assar Law Firm',
-  tagline: 'AI-assisted practice management for modern law firms',
+  tagline: 'Practice software',
   description:
-    'Assar Law Firm brings matter management, document intelligence and workflow automation together, with lawyer review built into every AI-assisted step.',
+    'Assar Law Firm’s software records matters, documents, tasks and invoices. Court entries and dates are typed by people. Client messages stay as previews until a provider is connected. AI, when a firm turns it on, stays a draft until a lawyer reviews it.',
   url: process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000',
   dashboardUrl: process.env.NEXT_PUBLIC_DASHBOARD_URL ?? 'http://localhost:3001',
   clientPortalUrl: process.env.NEXT_PUBLIC_CLIENT_PORTAL_URL ?? 'http://localhost:3002',

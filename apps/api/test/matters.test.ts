@@ -170,13 +170,19 @@ describe('court details', () => {
       },
     });
     expect(created.status).toBe(201);
-    expect(created.body.court).toEqual({
+    expect(created.body.court).toMatchObject({
       name: 'High Court of Delhi',
       caseNumber: 'CS(COMM) 123/2026',
       judge: 'J. Rao',
       courtroom: null,
       jurisdiction: null,
       filedOn: '2026-03-04',
+      cnr: null,
+      officialUrl: null,
+      trackingSource: 'manual',
+      freshness: 'unverified',
+      lookup: 'not_performed',
+      stale: false,
     });
     const id = created.body.id as string;
 

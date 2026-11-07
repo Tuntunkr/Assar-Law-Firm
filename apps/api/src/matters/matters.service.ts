@@ -3,11 +3,14 @@ import {
   clients,
   matterAccess,
   matters,
+  memberships,
   mongoose,
   parties,
+  tasks,
   teams,
   type MatterDoc,
 } from '@assar/database';
+import { isStaleVerification } from '@assar/types';
 import type { z } from 'zod';
 import type {
   createMatterSchema,
@@ -40,9 +43,36 @@ const courtDto = (c: MatterDoc['court']) => {
     courtroom: c.courtroom ?? null,
     jurisdiction: c.jurisdiction ?? null,
     filedOn: c.filedOn ?? null,
+    cnr: c.cnr ?? null,
+    officialUrl: c.officialUrl ?? null,
+    trackingSource: 'manual' as const,
+    freshness:
+      c.freshness === 'verified_manual' ? ('verified_manual' as const) : ('unverified' as const),
+    stale: c.freshness === 'verified_manual' && isStaleVerification(c.verifiedAt),
+    verifiedAt: c.verifiedAt ?? null,
+    lookup: 'not_performed' as const,
   };
-  return Object.values(out).some((v) => v !== null) ? out : null;
+  const meaningful = [
+    out.name,
+    out.caseNumber,
+    out.judge,
+    out.courtroom,
+    out.jurisdiction,
+    out.filedOn,
+    out.cnr,
+    out.officialUrl,
+  ];
+  return meaningful.some((v) => v) ? out : null;
 };
+
+/** Client-supplied court fields. Verification is never taken from the client. */
+const courtWrite = (court: NonNullable<z.infer<typeof createMatterSchema>['court']>) => ({
+  ...court,
+  trackingSource: 'manual' as const,
+  freshness: 'unverified' as const,
+  verifiedAt: null,
+  verifiedBy: null,
+});
 
 export const matterDto = (m: MatterDoc) => ({
   id: String(m._id),
@@ -121,7 +151,7 @@ export class MattersService {
             title: input.title,
             practiceArea: input.practiceArea,
             description: input.description,
-            court: input.court ?? null,
+            court: input.court ? courtWrite(input.court) : null,
             status: 'open',
             restricted: input.restricted,
             leadAttorneyId: (input.leadAttorneyId ?? null) as never,
@@ -164,7 +194,15 @@ export class MattersService {
 
   async list(auth: AuthContext, q: z.infer<typeof matterListQuerySchema>) {
     const restrictedVisibleIds = await this.access.visibleRestrictedIds(auth);
-    const page = await matters.listPage(auth.organizationId, { ...q, restrictedVisibleIds });
+    const assignedOnlyIds =
+      auth.role === 'intern'
+        ? await matterAccess.matterIdsFor(auth.organizationId, auth.userId)
+        : undefined;
+    const page = await matters.listPage(auth.organizationId, {
+      ...q,
+      restrictedVisibleIds,
+      assignedOnlyIds,
+    });
     return { data: page.data.map(matterDto), page: page.page };
   }
 
@@ -180,6 +218,7 @@ export class MattersService {
     if (patch.teamIds) await this.assertTeams(orgId, patch.teamIds);
 
     const set: Record<string, unknown> = { ...patch };
+    if (patch.court) set.court = courtWrite(patch.court);
     if (patch.status && patch.status !== current.status) {
       set.closedAt = patch.status === 'closed' || patch.status === 'archived' ? new Date() : null;
     }
@@ -195,6 +234,44 @@ export class MattersService {
       meta: { fields: Object.keys(patch) },
     });
     return matterDto(updated);
+  }
+
+  /** Records that a person compared this entry with an official source. Does not fetch that source. */
+  async verifyCourt(auth: AuthContext, id: string, req: Req) {
+    const current = await this.access.load(auth, id, req);
+    if (!current.court || courtDto(current.court) === null)
+      throw new ApiError(409, 'CONFLICT', 'Add court details before recording a verification');
+    const verifiedAt = new Date();
+    const updated = await matters.update(auth.organizationId, id, {
+      court: {
+        ...current.court,
+        trackingSource: 'manual',
+        freshness: 'verified_manual',
+        verifiedAt,
+        verifiedBy: auth.userId,
+      },
+    });
+    if (!updated) throw new ApiError(404, 'NOT_FOUND', 'Matter not found');
+    await this.audit.record({
+      organizationId: auth.organizationId,
+      actorId: auth.userId,
+      action: 'court.verified_manual',
+      targetType: 'matter',
+      targetId: id,
+      req,
+      meta: { freshness: 'verified_manual' },
+    });
+    return matterDto(updated);
+  }
+
+  private async internAssignees(orgId: string, matterId: string) {
+    const ids = [...new Set((await tasks.openAssigneeIds(orgId, matterId)).map(String))];
+    const kept: string[] = [];
+    for (const userId of ids) {
+      const member = await memberships.find(orgId, userId);
+      if (member?.role === 'intern' && member.status === 'active') kept.push(userId);
+    }
+    return kept;
   }
 
   // ---- access ----
@@ -220,15 +297,17 @@ export class MattersService {
 
     const before = (await matterAccess.userIdsFor(orgId, id)).map(String);
     // The actor and lead attorney stay on the list so a restriction can't strand the matter.
+    const internAssignees = await this.internAssignees(orgId, id);
     const userIds = input.restricted
       ? [
           ...new Set([
             ...input.userIds,
             auth.userId,
+            ...internAssignees,
             ...(m.leadAttorneyId ? [String(m.leadAttorneyId)] : []),
           ]),
         ]
-      : [];
+      : internAssignees;
     await assertActiveMembers(orgId, userIds);
 
     const tx = await mongoose.startSession();

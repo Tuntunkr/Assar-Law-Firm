@@ -13,7 +13,9 @@ export const NAV: { group: string; items: NavItem[] }[] = [
     items: [
       { to: '/', label: 'Dashboard', icon: 'dashboard' },
       { to: '/calendar', label: 'Calendar', icon: 'calendar', perm: 'calendar:write' },
+      { to: '/dates', label: 'Dates', icon: 'calendar', perm: 'matter:read' },
       { to: '/tasks', label: 'Tasks', icon: 'tasks', perm: 'task:write' },
+      { to: '/updates', label: 'Client updates', icon: 'documents', perm: 'matter:read' },
     ],
   },
   {

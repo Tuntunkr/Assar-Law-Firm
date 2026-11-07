@@ -122,7 +122,7 @@ const membershipSchema = new Schema<MembershipDoc>(
     role: {
       type: String,
       required: true,
-      enum: ['owner', 'admin', 'attorney', 'paralegal', 'billing', 'staff'],
+      enum: ['owner', 'admin', 'attorney', 'paralegal', 'billing', 'staff', 'intern'],
     },
     hourlyRateCents: { type: Number, default: null, min: 0 },
     status: { type: String, enum: ['active', 'disabled'], default: 'active' },
@@ -186,7 +186,7 @@ const invitationSchema = new Schema<InvitationDoc>(
     role: {
       type: String,
       required: true,
-      enum: ['admin', 'attorney', 'paralegal', 'billing', 'staff'],
+      enum: ['admin', 'attorney', 'paralegal', 'billing', 'staff', 'intern'],
     },
     tokenHash: { type: String, required: true, unique: true },
     invitedBy: { type: Schema.Types.ObjectId, required: true },
@@ -352,6 +352,13 @@ export interface MatterDoc {
     jurisdiction?: string;
     /** `YYYY-MM-DD` */
     filedOn?: string;
+    /** 16-character shape. Not a court lookup. */
+    cnr?: string;
+    officialUrl?: string;
+    trackingSource?: 'manual';
+    freshness?: 'unverified' | 'verified_manual';
+    verifiedAt?: Date | null;
+    verifiedBy?: Id | null;
   } | null;
   status: 'open' | 'pending' | 'closed' | 'archived';
   /** Restricted matters are visible only to users in matter_access (plus the owner, audited). */
@@ -386,6 +393,16 @@ const matterSchema = new Schema<MatterDoc>(
           courtroom: { type: String, maxlength: 100 },
           jurisdiction: { type: String, maxlength: 150 },
           filedOn: { type: String, match: /^\d{4}-\d{2}-\d{2}$/ },
+          cnr: { type: String, uppercase: true, match: /^[A-Z0-9]{16}$/ },
+          officialUrl: { type: String, maxlength: 500 },
+          trackingSource: { type: String, enum: ['manual'], default: 'manual' },
+          freshness: {
+            type: String,
+            enum: ['unverified', 'verified_manual'],
+            default: 'unverified',
+          },
+          verifiedAt: { type: Date, default: null },
+          verifiedBy: { type: Schema.Types.ObjectId, default: null },
         },
         { _id: false },
       ),
@@ -408,6 +425,8 @@ matterSchema.index({ organizationId: 1, _id: -1 });
 matterSchema.index({ organizationId: 1, status: 1, _id: -1 });
 matterSchema.index({ organizationId: 1, clientId: 1, _id: -1 });
 matterSchema.index({ organizationId: 1, titleLower: 1 });
+matterSchema.index({ organizationId: 1, 'court.cnr': 1 });
+matterSchema.index({ organizationId: 1, 'court.name': 1 });
 export const MatterModel = define<MatterDoc>('Matter', matterSchema);
 
 export interface MatterAccessDoc {
@@ -705,8 +724,18 @@ export interface CalendarEventDoc {
   location?: string;
   attendeeIds: Id[];
   status: 'scheduled' | 'completed' | 'cancelled';
-  /** Deadlines are only ever entered by people (or confirmed from AI suggestions in a later phase). */
+  /** Entered by a person. Court systems do not write this row. */
   source: 'manual';
+  outcome?: {
+    result: string;
+    notes: string;
+    nextHearingOn?: string | null;
+    reviewStatus: 'draft' | 'reviewed';
+    recordedBy: Id;
+    recordedAt: Date;
+    reviewedBy?: Id | null;
+    reviewedAt?: Date | null;
+  } | null;
   createdBy: Id;
   createdAt: Date;
   updatedAt: Date;
@@ -725,6 +754,22 @@ const eventSchema = new Schema<CalendarEventDoc>(
     attendeeIds: { type: [Schema.Types.ObjectId], default: [] },
     status: { type: String, enum: ['scheduled', 'completed', 'cancelled'], default: 'scheduled' },
     source: { type: String, enum: ['manual'], default: 'manual' },
+    outcome: {
+      type: new Schema(
+        {
+          result: { type: String, required: true },
+          notes: { type: String, required: true, maxlength: 5000 },
+          nextHearingOn: { type: String, match: /^\d{4}-\d{2}-\d{2}$/ },
+          reviewStatus: { type: String, enum: ['draft', 'reviewed'], required: true },
+          recordedBy: { type: Schema.Types.ObjectId, required: true },
+          recordedAt: { type: Date, required: true },
+          reviewedBy: { type: Schema.Types.ObjectId, default: null },
+          reviewedAt: { type: Date, default: null },
+        },
+        { _id: false },
+      ),
+      default: null,
+    },
     createdBy: { type: Schema.Types.ObjectId, required: true },
   },
   { timestamps: true },
@@ -1241,3 +1286,131 @@ invoiceSchema.index({ organizationId: 1, _id: -1 });
 invoiceSchema.index({ organizationId: 1, status: 1, dueAt: 1 });
 invoiceSchema.index({ organizationId: 1, clientId: 1, _id: -1 });
 export const InvoiceModel = define<InvoiceDoc>('Invoice', invoiceSchema);
+
+export const DEADLINE_STATUSES = [
+  'draft',
+  'pending_approval',
+  'approved',
+  'rejected',
+  'closed',
+] as const;
+export interface DeadlineDoc {
+  _id: Id;
+  organizationId: Id;
+  matterId: Id;
+  kind: 'limitation' | 'other_deadline';
+  title: string;
+  basisNote: string;
+  /** `YYYY-MM-DD` in Asia/Kolkata. Typed by a person. */
+  dueOn: string;
+  reminderDaysBefore: number[];
+  escalateAfterDays: number;
+  status: (typeof DEADLINE_STATUSES)[number];
+  history: { at: Date; actorId: Id; action: string; note?: string | null }[];
+  approvedBy?: Id | null;
+  approvedAt?: Date | null;
+  createdBy: Id;
+  createdAt: Date;
+  updatedAt: Date;
+}
+const deadlineSchema = new Schema<DeadlineDoc>(
+  {
+    organizationId: { type: Schema.Types.ObjectId, required: true },
+    matterId: { type: Schema.Types.ObjectId, required: true },
+    kind: { type: String, enum: ['limitation', 'other_deadline'], required: true },
+    title: { type: String, required: true, trim: true, maxlength: 200 },
+    basisNote: { type: String, required: true, maxlength: 5000 },
+    dueOn: { type: String, required: true, match: /^\d{4}-\d{2}-\d{2}$/ },
+    reminderDaysBefore: { type: [Number], default: [7, 3, 1, 0] },
+    escalateAfterDays: { type: Number, default: 1 },
+    status: { type: String, enum: DEADLINE_STATUSES, default: 'draft' },
+    history: {
+      type: [
+        new Schema(
+          {
+            at: { type: Date, required: true },
+            actorId: { type: Schema.Types.ObjectId, required: true },
+            action: { type: String, required: true },
+            note: { type: String, maxlength: 500, default: null },
+          },
+          { _id: false },
+        ),
+      ],
+      default: [],
+    },
+    approvedBy: { type: Schema.Types.ObjectId, default: null },
+    approvedAt: { type: Date, default: null },
+    createdBy: { type: Schema.Types.ObjectId, required: true },
+  },
+  { timestamps: true },
+);
+deadlineSchema.index({ organizationId: 1, matterId: 1, dueOn: 1 });
+deadlineSchema.index({ organizationId: 1, status: 1, dueOn: 1 });
+export const DeadlineModel = define<DeadlineDoc>('Deadline', deadlineSchema);
+
+export interface OutboxDoc {
+  _id: Id;
+  organizationId: Id;
+  clientId: Id;
+  matterId?: Id | null;
+  channel: 'email' | 'whatsapp';
+  templateLabel: string;
+  body: string;
+  /** Always `not_claimed`. This product does not mark a provider template as approved. */
+  providerTemplateApproval: 'not_claimed';
+  consent: {
+    optedIn: true;
+    namesFirm: true;
+    note?: string | null;
+    recordedBy: Id;
+    recordedAt: Date;
+  };
+  status: 'draft' | 'pending_approval' | 'rejected' | 'mock_delivered' | 'external_activation_gate';
+  provider: 'mock' | 'unconfigured';
+  attempts: number;
+  approvedBy?: Id | null;
+  approvedAt?: Date | null;
+  webhookEventIds: string[];
+  createdBy: Id;
+  createdAt: Date;
+  updatedAt: Date;
+}
+const outboxSchema = new Schema<OutboxDoc>(
+  {
+    organizationId: { type: Schema.Types.ObjectId, required: true },
+    clientId: { type: Schema.Types.ObjectId, required: true },
+    matterId: { type: Schema.Types.ObjectId, default: null },
+    channel: { type: String, enum: ['email', 'whatsapp'], required: true },
+    templateLabel: { type: String, required: true, maxlength: 120 },
+    body: { type: String, required: true, maxlength: 5000 },
+    providerTemplateApproval: { type: String, enum: ['not_claimed'], default: 'not_claimed' },
+    consent: {
+      type: new Schema(
+        {
+          optedIn: { type: Boolean, required: true },
+          namesFirm: { type: Boolean, required: true },
+          note: { type: String, maxlength: 500, default: null },
+          recordedBy: { type: Schema.Types.ObjectId, required: true },
+          recordedAt: { type: Date, required: true },
+        },
+        { _id: false },
+      ),
+      required: true,
+    },
+    status: {
+      type: String,
+      enum: ['draft', 'pending_approval', 'rejected', 'mock_delivered', 'external_activation_gate'],
+      default: 'draft',
+    },
+    provider: { type: String, enum: ['mock', 'unconfigured'], default: 'unconfigured' },
+    attempts: { type: Number, default: 0 },
+    approvedBy: { type: Schema.Types.ObjectId, default: null },
+    approvedAt: { type: Date, default: null },
+    webhookEventIds: { type: [String], default: [] },
+    createdBy: { type: Schema.Types.ObjectId, required: true },
+  },
+  { timestamps: true },
+);
+outboxSchema.index({ organizationId: 1, _id: -1 });
+outboxSchema.index({ organizationId: 1, status: 1, _id: -1 });
+export const OutboxModel = define<OutboxDoc>('Outbox', outboxSchema);

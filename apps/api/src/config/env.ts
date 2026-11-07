@@ -69,6 +69,10 @@ const object = z.object({
   AI_ENABLED: bool.default('false'),
   /** Publish workflow events (matter.created, ...) to the queue for delivery to n8n by the worker. */
   WORKFLOWS_ENABLED: bool.default('false'),
+  /** `mock` records a delivery without a network call. Anything else is an activation gate. */
+  MESSAGE_PROVIDER: z.enum(['mock', 'unconfigured']).default('unconfigured'),
+  /** Required before the mock webhook will accept a callback. Never invent a value. */
+  MESSAGE_WEBHOOK_SECRET: z.string().min(16).optional(),
   AI_MAX_ACTIVE_JOBS_PER_ORG: z.coerce.number().int().min(1).default(5),
   AI_JOB_MAX_ATTEMPTS: z.coerce.number().int().min(1).max(10).default(3),
   SCAN_JOB_MAX_ATTEMPTS: z.coerce.number().int().min(1).max(10).default(3),

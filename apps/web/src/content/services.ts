@@ -50,7 +50,7 @@ export const productPages: Record<string, ProductPage> = {
       },
       {
         title: 'Matters & parties',
-        body: 'Organize matters with associated parties, status, team assignments and communication history.',
+        body: 'Organize matters with associated parties, status and team assignments. Client updates are previews until a person approves them and a provider is connected.',
       },
       {
         title: 'Hearings, deadlines & tasks',
@@ -119,9 +119,13 @@ export const productPages: Record<string, ProductPage> = {
   'workflow-automation': {
     slug: 'workflow-automation',
     title: 'Workflow Automation',
-    summary: 'Automate routine coordination without bypassing permissions.',
+    summary:
+      'In-app reminders run on a schedule. External workflow hosts stay off until a real webhook address is configured.',
     features: [
-      { title: 'Reminders', body: 'Deadline and task reminders delivered to the right people.' },
+      {
+        title: 'Reminders',
+        body: 'Approved dates and intern task due dates can notify staff inside the app. They are not sent to clients.',
+      },
       { title: 'Client onboarding', body: 'Repeatable intake steps for new clients and matters.' },
       { title: 'Task assignment', body: 'Route work to teams based on matter type.' },
       { title: 'Daily reports', body: 'Scheduled summaries for partners and managers.' },

@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { tasks, type TaskDoc } from '@assar/database';
+import { matterAccess, memberships, tasks, type TaskDoc } from '@assar/database';
 import type { z } from 'zod';
 import type { createTaskSchema, taskListQuerySchema, updateTaskSchema } from '@assar/validation';
 import { AuditService } from '../audit/audit.service';
@@ -38,22 +38,42 @@ export class TasksService {
     orgId: string,
     matter: Awaited<ReturnType<MatterAccessService['loadOptional']>>,
     assigneeId: string | null | undefined,
+    actorId: string,
+    req: Req,
   ) {
     if (!assigneeId) return;
     await assertActiveMembers(orgId, [assigneeId]);
+    const member = await memberships.find(orgId, assigneeId);
+    if (member?.role === 'intern' && matter) {
+      await matterAccess.grant(orgId, matter._id, assigneeId, actorId);
+      await this.audit.record({
+        organizationId: orgId,
+        actorId,
+        action: 'matter.intern_assigned',
+        targetType: 'matter',
+        targetId: String(matter._id),
+        req,
+        meta: { assigneeId },
+      });
+      return;
+    }
     if (matter) await this.access.assertUserCanSee(orgId, matter, assigneeId);
   }
 
   private async load(auth: AuthContext, id: string, req: Req) {
     const t = await tasks.findById(auth.organizationId, id);
     if (!t) throw new ApiError(404, 'NOT_FOUND', 'Task not found');
+    if (auth.role === 'intern' && idStr(t.assigneeId) !== auth.userId)
+      throw new ApiError(404, 'NOT_FOUND', 'Task not found');
     const matter = await this.access.loadFor(auth, idStr(t.matterId), req, 'Task not found');
     return { task: t, matter };
   }
 
   async create(auth: AuthContext, input: z.infer<typeof createTaskSchema>, req: Req) {
+    if (auth.role === 'intern')
+      throw new ApiError(403, 'FORBIDDEN', 'An intern cannot create tasks');
     const matter = await this.access.loadOptional(auth, input.matterId, req);
-    await this.checkAssignee(auth.organizationId, matter, input.assigneeId);
+    await this.checkAssignee(auth.organizationId, matter, input.assigneeId, auth.userId, req);
     const t = await tasks.create({
       organizationId: auth.organizationId as never,
       matterId: (input.matterId ?? null) as never,
@@ -81,9 +101,11 @@ export class TasksService {
   async list(auth: AuthContext, q: z.infer<typeof taskListQuerySchema>, req: Req) {
     if (q.matterId) await this.access.load(auth, q.matterId, req);
     const hiddenMatterIds = q.matterId ? [] : await this.access.hiddenMatterIds(auth);
+    const assigneeId =
+      auth.role === 'intern' ? auth.userId : q.assigneeId === 'me' ? auth.userId : q.assigneeId;
     const page = await tasks.listPage(auth.organizationId, {
       ...q,
-      assigneeId: q.assigneeId === 'me' ? auth.userId : q.assigneeId,
+      assigneeId,
       hiddenMatterIds,
     });
     return { data: page.data.map(taskDto), page: page.page };
@@ -94,6 +116,15 @@ export class TasksService {
   }
 
   async update(auth: AuthContext, id: string, patch: z.infer<typeof updateTaskSchema>, req: Req) {
+    if (auth.role === 'intern') {
+      const allowed = Object.keys(patch).every((k) => k === 'status');
+      if (!allowed)
+        throw new ApiError(
+          403,
+          'FORBIDDEN',
+          'An intern can only change the status of an assigned task',
+        );
+    }
     const { task, matter } = await this.load(auth, id, req);
     const targetMatter =
       patch.matterId !== undefined
@@ -105,6 +136,8 @@ export class TasksService {
         auth.organizationId,
         targetMatter,
         patch.assigneeId === undefined ? idStr(task.assigneeId) : patch.assigneeId,
+        auth.userId,
+        req,
       );
     }
     const set: Record<string, unknown> = { ...patch };

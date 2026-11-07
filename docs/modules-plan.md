@@ -1,5 +1,7 @@
 # Mandatory modules: status and build plan
 
+> Historical note. The approved scope and current behaviour are in `docs/prd/approved-practice-modules.md`. This file still describes an older gap list and should not be read as the live inventory.
+
 The five product modules every firm needs. Status is **as verified in the code**, not as hoped.
 
 Legend: ✅ built and used by the dashboard · 🟡 API exists, no UI (or partial) · ❌ not built
