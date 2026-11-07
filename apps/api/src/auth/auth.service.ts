@@ -16,10 +16,11 @@ import type {
   changePasswordSchema,
   loginSchema,
   registerSchema,
+  updateProfileSchema,
 } from '@assar/validation';
 import { AuditService } from '../audit/audit.service';
 import type { AppRequest, AuthContext } from '../common/auth-context';
-import { decryptSecret, encryptSecret, sha256 } from '../common/crypto';
+import { decryptWithKeys, encryptSecret, sha256 } from '../common/crypto';
 import { ApiError } from '../common/exception.filter';
 import { ENV, type Env } from '../config/env';
 import { PasswordService } from './password.service';
@@ -138,13 +139,61 @@ export class AuthService {
     ]);
     if (!user || !org) throw new ApiError(401, 'UNAUTHENTICATED', 'Authentication required');
     return {
-      user: { id: String(user._id), email: user.email, name: user.name },
+      user: {
+        id: String(user._id),
+        email: user.email,
+        name: user.name,
+        lastLoginAt: user.lastLoginAt ?? null,
+      },
       organization: { id: String(org._id), name: org.name, slug: org.slug },
       role: auth.role,
       permissions: ROLE_PERMISSIONS[auth.role],
       mfa: { enabled: user.mfa.enabled, enrollmentRequired: auth.mfaEnrollmentRequired },
       csrfToken: auth.csrfToken,
     };
+  }
+
+  async updateProfile(auth: AuthContext, input: z.infer<typeof updateProfileSchema>, req: Req) {
+    const user = await this.requireUser(auth.userId);
+    const before = user.name;
+    user.name = input.name;
+    await user.save();
+    await this.audit.record({
+      organizationId: auth.organizationId,
+      actorId: auth.userId,
+      action: 'auth.profile_updated',
+      req,
+      meta: { fields: before === input.name ? [] : ['name'] },
+    });
+    return this.me(auth);
+  }
+
+  listSessions(auth: AuthContext) {
+    return this.sessions.listFor(auth.userId, auth.sessionTokenHash);
+  }
+
+  async revokeSession(auth: AuthContext, id: string, req: Req) {
+    if (!mongoose.isValidObjectId(id)) throw new ApiError(404, 'NOT_FOUND', 'Session not found');
+    const res = await this.sessions.revokeOne(auth.userId, id, auth.sessionTokenHash);
+    if (res === 'current')
+      throw new ApiError(409, 'CONFLICT', 'This is your current session; use sign out instead');
+    if (res === 'missing') throw new ApiError(404, 'NOT_FOUND', 'Session not found');
+    await this.audit.record({
+      organizationId: auth.organizationId,
+      actorId: auth.userId,
+      action: 'auth.session_revoked',
+      req,
+    });
+  }
+
+  async revokeOtherSessions(auth: AuthContext, req: Req) {
+    await this.sessions.revokeOthers(auth.userId, auth.sessionTokenHash);
+    await this.audit.record({
+      organizationId: auth.organizationId,
+      actorId: auth.userId,
+      action: 'auth.sessions_revoked_others',
+      req,
+    });
   }
 
   async changePassword(auth: AuthContext, input: z.infer<typeof changePasswordSchema>, req: Req) {
@@ -220,7 +269,7 @@ export class AuthService {
     const user = await this.requireUser(auth.userId);
     if (user.mfa.enabled) throw new ApiError(409, 'CONFLICT', 'MFA is already enabled');
     if (!user.mfa.pendingSecretEnc) throw new ApiError(409, 'CONFLICT', 'Start MFA setup first');
-    const secret = decryptSecret(user.mfa.pendingSecretEnc, this.env.MFA_ENCRYPTION_KEY);
+    const secret = this.decryptMfa(user.mfa.pendingSecretEnc);
     const step = this.totp.verify(secret, code);
     if (step === null) throw new ApiError(400, 'VALIDATION_FAILED', 'Invalid authentication code');
     const recovery = this.totp.newRecoveryCodes();
@@ -265,6 +314,14 @@ export class AuthService {
   }
 
   // ---- internals ----
+
+  /** Accepts the previous key too, so a key rotation never locks anyone out while secrets are re-encrypted. */
+  private decryptMfa(payload: string): string {
+    return decryptWithKeys(payload, [
+      this.env.MFA_ENCRYPTION_KEY,
+      this.env.MFA_ENCRYPTION_KEY_PREVIOUS,
+    ]);
+  }
 
   private async requireUser(id: string) {
     const user = await users.findById(id);
@@ -312,10 +369,7 @@ export class AuthService {
       );
       return res.modifiedCount === 1;
     }
-    const step = this.totp.verify(
-      decryptSecret(user.mfa.secretEnc, this.env.MFA_ENCRYPTION_KEY),
-      code,
-    );
+    const step = this.totp.verify(this.decryptMfa(user.mfa.secretEnc), code);
     if (step === null) return false;
     const res = await UserModel.updateOne(
       { _id: user._id, $or: [{ 'mfa.lastUsedStep': null }, { 'mfa.lastUsedStep': { $lt: step } }] },

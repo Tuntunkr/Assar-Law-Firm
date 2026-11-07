@@ -31,8 +31,21 @@ const STATUS_CODES: Record<number, ErrorCode> = {
   403: 'FORBIDDEN',
   404: 'NOT_FOUND',
   409: 'CONFLICT',
+  413: 'PAYLOAD_TOO_LARGE',
   429: 'RATE_LIMITED',
 };
+
+/** Errors thrown by Express's body parser (http-errors): too large, malformed JSON, bad charset/encoding. */
+function isBodyParserError(e: unknown): e is { status: number; type: string } {
+  const x = e as { status?: unknown; type?: unknown };
+  return (
+    typeof x?.status === 'number' &&
+    x.status >= 400 &&
+    x.status < 500 &&
+    typeof x.type === 'string' &&
+    /^(entity\.|encoding\.|charset\.|request\.)/.test(x.type)
+  );
+}
 
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
@@ -61,6 +74,16 @@ export class AllExceptionsFilter implements ExceptionFilter {
       status = 429;
       code = 'RATE_LIMITED';
       message = 'Too many requests';
+    } else if (isBodyParserError(exception)) {
+      // Never echo the parser's message: it can quote the offending input.
+      status = exception.status;
+      code = status === 413 ? 'PAYLOAD_TOO_LARGE' : 'VALIDATION_FAILED';
+      message =
+        status === 413
+          ? 'Request body is too large'
+          : status === 415
+            ? 'Unsupported content type'
+            : 'Malformed request body';
     } else if (exception instanceof ApiError) {
       status = exception.getStatus();
       code = exception.code;
@@ -68,7 +91,13 @@ export class AllExceptionsFilter implements ExceptionFilter {
     } else if (exception instanceof HttpException) {
       status = exception.getStatus();
       code = STATUS_CODES[status] ?? 'INTERNAL';
-      message = status >= 500 ? 'Internal server error' : exception.message;
+      // A bare 400 here comes from Nest's mapping of body-parser/URI errors, whose text can quote the request.
+      message =
+        status >= 500
+          ? 'Internal server error'
+          : status === 400
+            ? 'Malformed request'
+            : exception.message;
     } else if ((exception as { code?: number })?.code === 11000) {
       status = 409;
       code = 'CONFLICT';

@@ -54,10 +54,11 @@ describe('extractText', () => {
   });
 
   it('fails clearly (not silently) for unsupported, empty and corrupt files', async () => {
-    await expect(extractText(Buffer.from('x'), 'application/rtf')).rejects.toMatchObject({
+    await expect(extractText(Buffer.from('x'), 'application/vnd.ms-excel')).rejects.toMatchObject({
       code: 'UNSUPPORTED_FILE_TYPE',
       retryable: false,
     });
+    // An image without an OCR engine cannot be read, and says so.
     await expect(extractText(Buffer.from('image/png'), 'image/png')).rejects.toBeInstanceOf(
       ExtractionError,
     );
@@ -77,7 +78,8 @@ describe('extractText', () => {
 
   it('knows which types it can read', () => {
     expect(isExtractable('application/pdf')).toBe(true);
-    expect(isExtractable('image/tiff')).toBe(false);
+    expect(isExtractable('image/tiff')).toBe(true);
+    expect(isExtractable('application/vnd.ms-excel')).toBe(false);
   });
 });
 

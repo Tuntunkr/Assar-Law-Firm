@@ -86,6 +86,9 @@ export async function startWorkerApp(
       ? { baseUrl: env.N8N_WEBHOOK_BASE_URL, secret: env.N8N_WEBHOOK_SECRET! }
       : undefined,
     scanConcurrency: env.SCAN_CONCURRENCY,
+    extractConcurrency: env.EXTRACT_CONCURRENCY,
+    ocrLanguages: env.OCR_ENABLED ? env.OCR_LANGUAGES : false,
+    maxOcrPages: env.OCR_MAX_PAGES,
     aiConcurrency: env.AI_CONCURRENCY,
     maxContextChars: env.AI_MAX_CONTEXT_CHARS,
     maxExtractBytes: env.AI_MAX_EXTRACT_BYTES,

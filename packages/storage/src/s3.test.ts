@@ -5,7 +5,7 @@ const storage = new S3Storage({
   endpoint: 'http://minio.test:9000',
   region: 'us-east-1',
   bucket: 'assar-private',
-  accessKey: 'AKIATESTTESTTESTTEST',
+  accessKey: 'AKIATESTTESTTESTTEST', // secrets:ignore (fake key; the test only checks URL signing)
   secretKey: 'test-secret-key-test-secret-key',
   forcePathStyle: true,
 });

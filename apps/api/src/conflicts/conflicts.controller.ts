@@ -2,7 +2,7 @@ import { Body, Controller, HttpCode, Post, Req } from '@nestjs/common';
 import { conflictCheckSchema } from '@assar/validation';
 import type { z } from 'zod';
 import type { AppRequest, AuthContext } from '../common/auth-context';
-import { Auth, RequirePermissions } from '../common/decorators';
+import { Auth, RateLimit, RequirePermissions } from '../common/decorators';
 import { ZodPipe } from '../common/zod.pipe';
 import { ConflictsService } from './conflicts.service';
 
@@ -11,6 +11,7 @@ export class ConflictsController {
   constructor(private readonly conflicts: ConflictsService) {}
 
   @RequirePermissions('conflict:check')
+  @RateLimit({ name: 'conflict-check', limit: 60, windowSeconds: 60 }) // scans client and party names
   @HttpCode(200)
   @Post()
   check(

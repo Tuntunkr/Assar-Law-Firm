@@ -2,7 +2,7 @@ import 'reflect-metadata';
 import type { INestApplication } from '@nestjs/common';
 import { mongoose, syncIndexes } from '@assar/database';
 import request from 'supertest';
-import { createApp } from '../src/app.factory';
+import { createApp, type CreateAppOptions } from '../src/app.factory';
 import { loadEnv, type Env } from '../src/config/env';
 import { TotpService } from '../src/auth/totp.service';
 
@@ -22,6 +22,9 @@ export function testEnv(overrides: Record<string, string> = {}): Env {
     QUEUE_PREFIX: `t${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`,
     JOB_BACKOFF_MS: '40',
     AUTH_RATE_LIMIT_PER_MIN: '1000',
+    // Per-user limits are exercised in their own suite; everywhere else they must not get in the way.
+    PRINCIPAL_RATE_LIMIT_PER_MIN: '1000000',
+    SERVICE_RATE_LIMIT_PER_MIN: '1000000',
     GLOBAL_RATE_LIMIT_PER_MIN: '100000',
     LOG_LEVEL: 'silent',
     ...overrides,
@@ -29,9 +32,12 @@ export function testEnv(overrides: Record<string, string> = {}): Env {
 }
 
 /** Boots the app against the dev replica set and starts from an empty database. */
-export async function bootApp(overrides: Record<string, string> = {}): Promise<INestApplication> {
+export async function bootApp(
+  overrides: Record<string, string> = {},
+  options: CreateAppOptions = {},
+): Promise<INestApplication> {
   const env = testEnv(overrides);
-  const app = await createApp(env);
+  const app = await createApp(env, options);
   envs.set(app, env);
   await app.init();
   await mongoose.connection.dropDatabase();
@@ -301,7 +307,7 @@ export async function settle(app: INestApplication, o: { ai?: boolean } = {}, ti
     const c = await queues.counts();
     const busy = (q: Record<string, number>) =>
       (q.waiting ?? 0) + (q.active ?? 0) + (q.delayed ?? 0);
-    if (busy(c.scan) === 0 && (!o.ai || busy(c.ai) === 0)) return;
+    if (busy(c.scan) === 0 && busy(c.extract) === 0 && (!o.ai || busy(c.ai) === 0)) return;
     if (Date.now() > deadline) throw new Error(`queues did not settle: ${JSON.stringify(c)}`);
     await new Promise((r) => setTimeout(r, 25));
   }

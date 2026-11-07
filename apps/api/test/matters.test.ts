@@ -154,6 +154,75 @@ describe('matters', () => {
   });
 });
 
+describe('court details', () => {
+  it('stores court details on create, updates and clears them, and keeps values out of the audit log', async () => {
+    const o = await registerWithMfa(app);
+    const clientId = await newClient(o);
+    const created = await post(o, '/v1/matters', {
+      clientId,
+      title: 'Lease Dispute',
+      practiceArea: 'litigation',
+      court: {
+        name: 'High Court of Delhi',
+        caseNumber: 'CS(COMM) 123/2026',
+        judge: 'J. Rao',
+        filedOn: '2026-03-04',
+      },
+    });
+    expect(created.status).toBe(201);
+    expect(created.body.court).toEqual({
+      name: 'High Court of Delhi',
+      caseNumber: 'CS(COMM) 123/2026',
+      judge: 'J. Rao',
+      courtroom: null,
+      jurisdiction: null,
+      filedOn: '2026-03-04',
+    });
+    const id = created.body.id as string;
+
+    const upd = await patch(o, `/v1/matters/${id}`, {
+      court: { name: 'District Court', courtroom: '4B' },
+    });
+    expect(upd.status).toBe(200);
+    expect(upd.body.court).toMatchObject({
+      name: 'District Court',
+      courtroom: '4B',
+      caseNumber: null,
+    });
+    expect((await o.agent.get(`/v1/matters/${id}`)).body.court.name).toBe('District Court');
+
+    const cleared = await patch(o, `/v1/matters/${id}`, { court: null });
+    expect(cleared.body.court).toBeNull();
+
+    const audit = JSON.stringify((await o.agent.get('/v1/audit-logs?action=matter.updated')).body);
+    expect(audit).not.toMatch(/District Court|J\. Rao|CS\(COMM\)/); // only field names are logged
+  });
+
+  it('rejects an impossible filing date and oversized values', async () => {
+    const o = await registerWithMfa(app);
+    const clientId = await newClient(o);
+    const base = { clientId, title: 'Case', practiceArea: 'litigation' };
+    expect(
+      (await post(o, '/v1/matters', { ...base, court: { filedOn: '2026-02-31' } })).status,
+    ).toBe(400);
+    expect(
+      (await post(o, '/v1/matters', { ...base, court: { filedOn: '04/03/2026' } })).status,
+    ).toBe(400);
+    expect(
+      (await post(o, '/v1/matters', { ...base, court: { name: 'x'.repeat(201) } })).status,
+    ).toBe(400);
+    expect((await post(o, '/v1/matters', { ...base, court: { name: 'Fine Court' } })).status).toBe(
+      201,
+    );
+  });
+
+  it('defaults to no court', async () => {
+    const o = await registerWithMfa(app);
+    const m = await newMatter(o, await newClient(o));
+    expect((await o.agent.get(`/v1/matters/${m.id}`)).body.court).toBeNull();
+  });
+});
+
 describe('restricted matters', () => {
   async function setup() {
     const owner = await registerWithMfa(app);

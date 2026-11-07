@@ -1,6 +1,9 @@
 import { DynamicModule, Module } from '@nestjs/common';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import type { DestinationStream } from 'pino';
+import { PrincipalRateLimitGuard, RATE_LIMIT_STORAGE } from './security/rate-limit.guard';
+import { RedisThrottlerStorage } from './security/redis-throttler.storage';
 import { AiModule } from './ai/ai.module';
 import { AutomationModule } from './automation/automation.module';
 import { AuditModule } from './audit/audit.module';
@@ -13,6 +16,7 @@ import { rateLimits } from './common/rate-limits';
 import { ENV, type Env } from './config/env';
 import { DatabaseModule } from './database/database.module';
 import { HealthController } from './health/health.controller';
+import { BillingModule } from './billing/billing.module';
 import { CalendarModule } from './calendar/calendar.module';
 import { ClientsModule } from './clients/clients.module';
 import { ConflictsModule } from './conflicts/conflicts.module';
@@ -26,18 +30,25 @@ import { StorageModule } from './storage/storage.module';
 import { SystemModule } from './system/system.module';
 import { TasksModule } from './tasks/tasks.module';
 import { TeamsModule } from './teams/teams.module';
+import { TemplatesModule } from './templates/templates.module';
+import { TimelineModule } from './timeline/timeline.module';
 
 @Module({})
 export class AppModule {
-  static forRoot(env: Env): DynamicModule {
+  static forRoot(env: Env, options: { logDestination?: DestinationStream } = {}): DynamicModule {
+    const logger = createLogger(env.LOG_LEVEL, options.logDestination);
+    // Counters live in Redis so limits hold across all API replicas.
+    const storage = new RedisThrottlerStorage(env.REDIS_URL, env.QUEUE_PREFIX, logger);
     rateLimits.auth = env.AUTH_RATE_LIMIT_PER_MIN;
     rateLimits.global = env.GLOBAL_RATE_LIMIT_PER_MIN;
     return {
       module: AppModule,
       global: true,
       imports: [
-        // In-memory counters: per-instance. Move to Redis storage before running multiple API replicas.
-        ThrottlerModule.forRoot([{ ttl: 60_000, limit: () => rateLimits.global }]),
+        ThrottlerModule.forRoot({
+          throttlers: [{ ttl: 60_000, limit: () => rateLimits.global }],
+          storage,
+        }),
         DatabaseModule,
         AuditModule,
         AuthModule,
@@ -56,14 +67,19 @@ export class AppModule {
         PortalModule,
         PortalAdminModule,
         AutomationModule,
+        BillingModule,
+        TimelineModule,
+        TemplatesModule,
       ],
       controllers: [HealthController],
       providers: [
         { provide: ENV, useValue: env },
-        { provide: LOGGER, useValue: createLogger(env.LOG_LEVEL) },
+        { provide: LOGGER, useValue: logger },
+        { provide: RATE_LIMIT_STORAGE, useValue: storage },
         { provide: APP_FILTER, useClass: AllExceptionsFilter },
         { provide: APP_GUARD, useClass: ThrottlerGuard },
         { provide: APP_GUARD, useClass: AuthGuard },
+        { provide: APP_GUARD, useClass: PrincipalRateLimitGuard },
         { provide: APP_GUARD, useClass: PermissionsGuard },
         { provide: APP_INTERCEPTOR, useClass: IdempotencyInterceptor },
       ],

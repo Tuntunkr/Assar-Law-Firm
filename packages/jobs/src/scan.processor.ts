@@ -1,7 +1,7 @@
 import { UnrecoverableError, type Job } from 'bullmq';
 import { audit, documentVersions, type DocumentVersionDoc } from '@assar/database';
 import type { ScanProvider, StorageService } from '@assar/storage';
-import type { EventSink, JobLogger, ScanJobData } from './names.js';
+import type { EventSink, ExtractJobData, JobLogger, ScanJobData } from './names.js';
 
 export interface ScanProcessorDeps {
   storage: StorageService;
@@ -9,6 +9,8 @@ export interface ScanProcessorDeps {
   logger: JobLogger;
   /** Optional: announces `document.scan_clean` to workflows. */
   events?: EventSink;
+  /** Optional: asks for the text of a version that passed (or, in development, skipped) the scan. */
+  requestExtract?: (data: ExtractJobData) => Promise<unknown>;
 }
 
 const entry = (
@@ -50,6 +52,14 @@ export function createScanProcessor(deps: ScanProcessorDeps) {
       await audit.record(
         entry(v, `document.scan_${outcome.status}`, { engine: outcome.engine }) as never,
       );
+      if (outcome.status === 'clean' || outcome.status === 'skipped') {
+        // Best effort: reading the text must never fail or retry the scan itself.
+        await deps
+          .requestExtract?.({ organizationId: String(org), versionId: String(v._id) })
+          .catch((e: Error) =>
+            deps.logger.warn({ error: e.message }, 'could not queue text extraction'),
+          );
+      }
       if (outcome.status === 'clean') {
         // Best effort: a failed announcement must never fail or retry the scan itself. Ids only.
         await deps.events

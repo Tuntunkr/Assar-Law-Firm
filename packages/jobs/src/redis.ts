@@ -9,7 +9,7 @@ export interface RedisConnectionOptions {
   tls?: Record<string, never>;
 }
 
-/** `redis://[user:pass@]host:port[/db]` (or `rediss://` for TLS) → connection options. */
+/** a `redis://` or `rediss://` (TLS) URL, optionally with credentials and a database number, → connection options. */
 export function parseRedisUrl(url: string): RedisConnectionOptions {
   const u = new URL(url);
   if (u.protocol !== 'redis:' && u.protocol !== 'rediss:')

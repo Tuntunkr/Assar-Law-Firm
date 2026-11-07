@@ -199,7 +199,8 @@ export class PortalAdminService {
 
   async setOutputShared(auth: AuthContext, outputId: string, shared: boolean, req: Req) {
     const out = await aiOutputs.findById(auth.organizationId, outputId);
-    if (!out) throw new ApiError(404, 'NOT_FOUND', 'AI output not found');
+    // Client-level summaries span matters and are private to their requester: never shareable.
+    if (!out || !out.matterId) throw new ApiError(404, 'NOT_FOUND', 'AI output not found');
     await this.access.loadFor(auth, String(out.matterId), req, 'AI output not found');
     // Approval is a precondition; sharing is a separate, deliberate step.
     const updated = await sharing.setOutputShared(

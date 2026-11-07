@@ -1,9 +1,16 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { documentVersions, documents, type DocumentVersionDoc } from '@assar/database';
+import {
+  documentTexts,
+  documentVersions,
+  documents,
+  matters,
+  type DocumentVersionDoc,
+} from '@assar/database';
 import type { z } from 'zod';
 import type {
   createDocumentSchema,
   documentListQuerySchema,
+  documentSearchQuerySchema,
   newVersionSchema,
 } from '@assar/validation';
 import { AuditService } from '../audit/audit.service';
@@ -244,10 +251,81 @@ export class DocumentsService {
     };
   }
 
+  async search(auth: AuthContext, q: z.infer<typeof documentSearchQuerySchema>, req: Req) {
+    if (q.matterId) await this.access.load(auth, q.matterId, req); // 404s for hidden matters
+    const hidden = await this.access.hiddenMatterIds(auth);
+    let only: string[] | undefined = q.matterId ? [q.matterId] : undefined;
+    if (q.clientId) {
+      const ofClient = (await matters.idsForClient(auth.organizationId, q.clientId)).map(String);
+      only = only ? only.filter((id) => ofClient.includes(id)) : ofClient;
+    }
+    const page = await documents.search(auth.organizationId, {
+      limit: q.limit,
+      cursor: q.cursor,
+      q: q.q,
+      onlyMatterIds: only as never,
+      excludeMatterIds: hidden as never,
+    });
+    const [latest, labels] = await Promise.all([
+      documentVersions.latestFor(
+        auth.organizationId,
+        page.data.map((d) => d._id),
+      ),
+      matters.summaries(auth.organizationId, [
+        ...new Set(page.data.map((d) => String(d.matterId))),
+      ] as never),
+    ]);
+    const byMatter = new Map(labels.map((m) => [String(m._id), m]));
+    return {
+      data: page.data.map((d) => {
+        const v = latest.get(String(d._id));
+        const m = byMatter.get(String(d.matterId));
+        return {
+          ...documentDto(d),
+          latest: v ? versionDto(v) : null,
+          matter: m
+            ? {
+                id: String(m._id),
+                matterNumber: m.matterNumber,
+                title: m.title,
+                clientId: String(m.clientId),
+              }
+            : null,
+        };
+      }),
+      page: page.page,
+    };
+  }
+
   async get(auth: AuthContext, id: string, req: Req) {
     const doc = await this.loadDocument(auth, id, req);
     const versions = await documentVersions.listForDocument(auth.organizationId, doc._id);
-    return { ...documentDto(doc), versions: versions.map(versionDto) };
+    const texts = await documentTexts.statusFor(
+      auth.organizationId,
+      versions.map((v) => v._id),
+    );
+    return {
+      ...documentDto(doc),
+      versions: versions.map((v) => {
+        const t = texts.get(String(v._id));
+        return {
+          ...versionDto(v),
+          // What was read from the file, never the text itself (that has its own endpoint).
+          text: t
+            ? {
+                status: t.status,
+                method: t.method ?? null,
+                pages: t.pages ?? null,
+                ocrPages: t.ocrPages ?? null,
+                confidence: t.confidence ?? null,
+                chars: t.chars ?? null,
+                truncated: !!t.truncated,
+                error: t.error ?? null,
+              }
+            : null,
+        };
+      }),
+    };
   }
 
   async rename(auth: AuthContext, id: string, title: string, req: Req) {

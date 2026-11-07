@@ -1,0 +1,9 @@
+{
+  "extends": "@assar/config/tsconfig.react.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "types": ["vite/client", "vitest/globals"],
+    "paths": { "@/*": ["./src/*"] }
+  },
+  "include": ["src", "test", "vite.config.ts"]
+}

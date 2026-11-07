@@ -35,7 +35,7 @@ import {
 
 const N8N_BIN = process.env.N8N_BIN;
 const run = promisify(execFile);
-const SECRET = 'n8n-e2e-shared-secret-0123456789abcdef';
+const SECRET = 'n8n-e2e-shared-secret-0123456789abcdef'; // secrets:ignore (fake shared secret used only against a throw-away local n8n)
 const WORKFLOWS_DIR = join(__dirname, '..', '..', '..', 'services', 'workflows', 'workflows');
 
 const freePort = () =>

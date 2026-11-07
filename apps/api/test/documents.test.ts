@@ -482,3 +482,55 @@ describe('matter access & organization isolation', () => {
     expect((await del(b, `/v1/documents/${docId}`)).status).toBe(404);
   });
 });
+
+describe('firm-wide document search', () => {
+  it('finds documents by title and by client, labelled with their matter', async () => {
+    const owner = await registerWithMfa(app);
+    const a = await newClient(owner, 'Alpha Corp');
+    const b = await newClient(owner, 'Beta Corp');
+    const ma = await newMatter(owner, a, { title: 'Alpha Lease' });
+    const mb = await newMatter(owner, b, { title: 'Beta Merger' });
+    await uploadDocument(app, owner, ma.id, { title: 'Signed Lease' });
+    await uploadDocument(app, owner, mb.id, { title: 'Merger Agreement' });
+
+    const all = (await owner.agent.get('/v1/documents').expect(200)).body;
+    expect(all.data.map((d: { title: string }) => d.title).sort()).toEqual([
+      'Merger Agreement',
+      'Signed Lease',
+    ]);
+    expect(all.data[0].matter).toMatchObject({ matterNumber: expect.stringMatching(/^M-/) });
+    expect(JSON.stringify(all)).not.toMatch(/storageKey/);
+
+    const byTitle = (await owner.agent.get('/v1/documents?q=lease').expect(200)).body;
+    expect(byTitle.data).toHaveLength(1);
+    const byClient = (await owner.agent.get(`/v1/documents?clientId=${b}`).expect(200)).body;
+    expect(byClient.data.map((d: { title: string }) => d.title)).toEqual(['Merger Agreement']);
+    // Regex characters in the search text are literal, not a pattern.
+    expect((await owner.agent.get('/v1/documents?q=.*').expect(200)).body.data).toHaveLength(0);
+  });
+
+  it('never lists documents on restricted matters the caller cannot access, or other firms', async () => {
+    const owner = await registerWithMfa(app);
+    const attorney = await addMember(app, owner, 'attorney');
+    const clientId = await newClient(owner);
+    const open = await newMatter(owner, clientId, { title: 'Open matter' });
+    const secret = await newMatter(owner, clientId, { title: 'Secret matter', restricted: true });
+    await uploadDocument(app, owner, open.id, { title: 'Visible doc' });
+    await uploadDocument(app, owner, secret.id, { title: 'Hidden doc' });
+
+    const seen = (await attorney.agent.get('/v1/documents').expect(200)).body.data;
+    expect(seen.map((d: { title: string }) => d.title)).toEqual(['Visible doc']);
+    // Asking for the hidden matter directly is a 404, the same as a matter that does not exist.
+    await attorney.agent.get(`/v1/documents?matterId=${secret.id}`).expect(404);
+    expect((await owner.agent.get('/v1/documents').expect(200)).body.data).toHaveLength(2);
+
+    const other = await registerWithMfa(app, 'Other');
+    expect((await other.agent.get('/v1/documents').expect(200)).body.data).toHaveLength(0);
+  });
+
+  it('requires document:read', async () => {
+    const owner = await registerWithMfa(app);
+    const billing = await addMember(app, owner, 'billing');
+    await billing.agent.get('/v1/documents').expect(403);
+  });
+});

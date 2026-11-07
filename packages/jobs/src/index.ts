@@ -11,3 +11,7 @@ export * from './ai.processor.js';
 export * from './workers.js';
 export * from './heartbeat.js';
 export * from './events.processor.js';
+export * from './case-file.js';
+export * from './ocr.js';
+export * from './extract.processor.js';
+export * from './billing.processor.js';

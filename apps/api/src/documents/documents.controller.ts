@@ -13,6 +13,9 @@ import {
 import {
   createDocumentSchema,
   documentListQuerySchema,
+  documentSearchQuerySchema,
+  documentTextQuerySchema,
+  textSearchQuerySchema,
   newVersionSchema,
   renameDocumentSchema,
 } from '@assar/validation';
@@ -23,6 +26,7 @@ import { ApiError } from '../common/exception.filter';
 import { ObjectIdPipe } from '../common/object-id.pipe';
 import { ZodPipe } from '../common/zod.pipe';
 import { DocumentsService } from './documents.service';
+import { TextService } from './text.service';
 
 const versionNo = (v: string) => {
   if (!/^\d{1,6}$/.test(v)) throw new ApiError(404, 'NOT_FOUND', 'Version not found');
@@ -31,7 +35,10 @@ const versionNo = (v: string) => {
 
 @Controller()
 export class DocumentsController {
-  constructor(private readonly docs: DocumentsService) {}
+  constructor(
+    private readonly docs: DocumentsService,
+    private readonly text: TextService,
+  ) {}
 
   @RequirePermissions('document:write')
   @Idempotent({ optional: true })
@@ -54,6 +61,16 @@ export class DocumentsController {
     @Req() req: AppRequest,
   ) {
     return this.docs.list(auth, matterId, q, req);
+  }
+
+  @RequirePermissions('document:read')
+  @Get('documents')
+  search(
+    @Auth() auth: AuthContext,
+    @Query(new ZodPipe(documentSearchQuerySchema)) q: z.infer<typeof documentSearchQuerySchema>,
+    @Req() req: AppRequest,
+  ) {
+    return this.docs.search(auth, q, req);
   }
 
   @RequirePermissions('document:read')
@@ -105,6 +122,50 @@ export class DocumentsController {
     @Req() req: AppRequest,
   ) {
     return this.docs.complete(auth, id, versionNo(v), req);
+  }
+
+  @RequirePermissions('document:read')
+  @Get('documents/:id/versions/:version/text')
+  versionText(
+    @Auth() auth: AuthContext,
+    @Param('id', ObjectIdPipe) id: string,
+    @Param('version') v: string,
+    @Query(new ZodPipe(documentTextQuerySchema)) q: z.infer<typeof documentTextQuerySchema>,
+    @Req() req: AppRequest,
+  ) {
+    return this.text.get(auth, id, versionNo(v), q.full, req);
+  }
+
+  @RequirePermissions('document:write')
+  @HttpCode(202)
+  @Post('documents/:id/versions/:version/extract')
+  extract(
+    @Auth() auth: AuthContext,
+    @Param('id', ObjectIdPipe) id: string,
+    @Param('version') v: string,
+    @Req() req: AppRequest,
+  ) {
+    return this.text.requestExtract(auth, id, versionNo(v), req);
+  }
+
+  @RequirePermissions('document:read')
+  @Get('documents/:id/similar')
+  similar(
+    @Auth() auth: AuthContext,
+    @Param('id', ObjectIdPipe) id: string,
+    @Req() req: AppRequest,
+  ) {
+    return this.text.similar(auth, id, 8, req);
+  }
+
+  @RequirePermissions('document:read')
+  @Get('search/documents')
+  searchText(
+    @Auth() auth: AuthContext,
+    @Query(new ZodPipe(textSearchQuerySchema)) q: z.infer<typeof textSearchQuerySchema>,
+    @Req() req: AppRequest,
+  ) {
+    return this.text.search(auth, q, req);
   }
 
   @RequirePermissions('document:write')

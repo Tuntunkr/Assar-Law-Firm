@@ -14,7 +14,7 @@ import { ObjectIdPipe } from '../common/object-id.pipe';
 import { AUTH_THROTTLE } from '../common/rate-limits';
 import { ZodPipe } from '../common/zod.pipe';
 import { ENV, type Env } from '../config/env';
-import { PORTAL_CSRF_COOKIE, PORTAL_SESSION_COOKIE } from './client-session.service';
+import { cookieBase, cookieNames } from '../security/cookies';
 import { PortalAuthService } from './portal-auth.service';
 import { PortalService } from './portal.service';
 
@@ -30,17 +30,22 @@ export class PortalController {
     private readonly auth: PortalAuthService,
     private readonly portal: PortalService,
     @Inject(ENV) private readonly env: Env,
-  ) {}
+  ) {
+    this.names = cookieNames(this.env.cookieSecure);
+  }
+
+  private readonly names: ReturnType<typeof cookieNames>;
 
   private setCookies(res: Response, s: { raw: string; csrf: string; maxAgeMs: number }) {
-    const base = {
-      secure: this.env.cookieSecure,
-      sameSite: 'lax' as const,
-      path: '/',
-      maxAge: s.maxAgeMs,
-    };
-    res.cookie(PORTAL_SESSION_COOKIE, s.raw, { ...base, httpOnly: true });
-    res.cookie(PORTAL_CSRF_COOKIE, s.csrf, { ...base, httpOnly: false });
+    const base = { ...cookieBase(this.env.cookieSecure), maxAge: s.maxAgeMs };
+    res.cookie(this.names.portalSession, s.raw, { ...base, httpOnly: true });
+    res.cookie(this.names.portalCsrf, s.csrf, { ...base, httpOnly: false });
+  }
+
+  private clearCookies(res: Response) {
+    const base = cookieBase(this.env.cookieSecure);
+    res.clearCookie(this.names.portalSession, { ...base, httpOnly: true });
+    res.clearCookie(this.names.portalCsrf, { ...base, httpOnly: false });
   }
 
   // ---- authentication ----
@@ -79,8 +84,7 @@ export class PortalController {
     @Res({ passthrough: true }) res: Response,
   ) {
     await this.auth.logout(c, req);
-    res.clearCookie(PORTAL_SESSION_COOKIE, { path: '/' });
-    res.clearCookie(PORTAL_CSRF_COOKIE, { path: '/' });
+    this.clearCookies(res);
   }
 
   @HttpCode(204)

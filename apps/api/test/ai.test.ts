@@ -1,6 +1,7 @@
 import type { INestApplication } from '@nestjs/common';
 import { AuditLogModel } from '@assar/database';
 import { createRedis, startHeartbeat, type JobQueues } from '@assar/jobs';
+import { createCanvas } from '@napi-rs/canvas';
 import request from 'supertest';
 import { QUEUES } from '../src/queue/queue.module';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
@@ -441,13 +442,14 @@ describe('retries and failures', () => {
       error: { code: 'AI_AUTH_FAILED', retryable: false },
     });
 
-    const rtf = await uploadDocument(app, attorney, matter.id, {
-      filename: 'old.rtf',
-      contentType: 'application/rtf',
-      content: '{\\rtf1 hello}',
+    // Legacy Excel (.xls) is the one upload type whose text we cannot read.
+    const xls = await uploadDocument(app, attorney, matter.id, {
+      filename: 'old.xls',
+      contentType: 'application/vnd.ms-excel',
+      content: 'not really a workbook',
     });
     grok.reset();
-    const unsupported = await runToEnd(attorney, summaryBody(matter.id, rtf.docId));
+    const unsupported = await runToEnd(attorney, summaryBody(matter.id, xls.docId));
     expect(unsupported).toMatchObject({
       status: 'failed',
       attempts: 1,
@@ -732,13 +734,187 @@ describe('observability', () => {
       attorney,
       summaryBody(matter.id, docId, { instructions: 'Secret instruction text' }),
     );
-    const rows = await AuditLogModel.find({
-      organizationId: owner.body.organization.id,
-      action: /^ai\./,
-    }).lean();
-    expect(rows.length).toBeGreaterThanOrEqual(2);
+    // The worker records "succeeded" just after the job status flips, so wait for it.
+    const rows = await waitFor(
+      () =>
+        AuditLogModel.find({ organizationId: owner.body.organization.id, action: /^ai\./ }).lean(),
+      (r) => r.length >= 2,
+    );
     expect(JSON.stringify(rows)).not.toMatch(
       /Acme Holdings|twelve \(12\)|Secret instruction|Point drawn/,
     );
   });
+});
+
+describe('client case-history summary', () => {
+  async function clientSetup() {
+    const owner = await registerWithMfa(app);
+    const attorney = await addMember(app, owner, 'attorney');
+    const other = await addMember(app, owner, 'attorney');
+    const clientId = await newClient(owner, 'Acme Holdings LLC');
+    const open = await newMatter(owner, clientId, {
+      title: 'Lease Dispute',
+      court: { name: 'High Court of Delhi', caseNumber: 'CS 12/2026' },
+      accessUserIds: [],
+    });
+    const secret = await newMatter(owner, clientId, {
+      title: 'Confidential Acquisition',
+      restricted: true,
+    });
+    await post(owner, '/v1/tasks', { title: 'File motion to compel', matterId: open.id });
+    await post(owner, '/v1/tasks', { title: 'Draft acquisition term sheet', matterId: secret.id });
+    return { owner, attorney, other, clientId, open, secret };
+  }
+  const start = (who: Actor, clientId: string, extra: object = {}) =>
+    post(who, '/v1/ai/client-summaries', { clientId, ...extra });
+
+  it('summarises the whole client file from a generated case-file source and keeps it a draft', async () => {
+    const { owner, clientId } = await clientSetup();
+    const created = await start(owner, clientId);
+    expect(created.status, JSON.stringify(created.body)).toBe(202);
+    expect(created.body).toMatchObject({ task: 'case_history', clientId, matterId: null });
+    const job = await finished(owner, created.body.id);
+    expect(job.status, JSON.stringify(job.error)).toBe('succeeded');
+
+    const prompt = userPrompt(grok.requests.length - 1);
+    expect(prompt).toContain('CASE FILE for client "Acme Holdings LLC"');
+    expect(prompt).toContain('Lease Dispute');
+    expect(prompt).toContain('High Court of Delhi');
+    expect(prompt).toContain('File motion to compel');
+
+    const out = (await owner.agent.get(`/v1/ai/outputs/${job.outputId}`).expect(200)).body;
+    expect(out).toMatchObject({
+      task: 'case_history',
+      clientId,
+      matterId: null,
+      reviewStatus: 'draft',
+    });
+    expect(out.label).toMatch(/DRAFT/);
+    const listed = (await owner.agent.get(`/v1/ai/outputs?clientId=${clientId}`).expect(200)).body;
+    expect(listed.data.map((o: { id: string }) => o.id)).toContain(job.outputId);
+  });
+
+  it('never puts a matter the requester cannot see into the case file', async () => {
+    const { owner, attorney, clientId } = await clientSetup();
+    const mine = await finished(attorney, (await start(attorney, clientId)).body.id);
+    expect(mine.status, JSON.stringify(mine.error)).toBe('succeeded');
+    const attorneyPrompt = userPrompt(grok.requests.length - 1);
+    expect(attorneyPrompt).toContain('Lease Dispute');
+    expect(attorneyPrompt).not.toMatch(/Confidential Acquisition|acquisition term sheet/);
+
+    grok.reset();
+    const all = await finished(owner, (await start(owner, clientId)).body.id);
+    expect(all.status).toBe('succeeded');
+    expect(userPrompt(0)).toMatch(/Confidential Acquisition/);
+  });
+
+  it('is private to the requester: colleagues cannot read, list, edit, approve or share it', async () => {
+    const { attorney, other, clientId } = await clientSetup();
+    const job = await finished(attorney, (await start(attorney, clientId)).body.id);
+    const outId = job.outputId as string;
+
+    await other.agent.get(`/v1/ai/jobs/${job.id}`).expect(404);
+    await other.agent.get(`/v1/ai/outputs/${outId}`).expect(404);
+    expect(
+      (await other.agent.get('/v1/ai/outputs').expect(200)).body.data.map(
+        (o: { id: string }) => o.id,
+      ),
+    ).not.toContain(outId);
+    expect(
+      (await other.agent.get(`/v1/ai/outputs?clientId=${clientId}`).expect(200)).body.data,
+    ).toHaveLength(0);
+    expect(
+      (await other.agent.get('/v1/ai/jobs').expect(200)).body.data.map((j: { id: string }) => j.id),
+    ).not.toContain(job.id);
+    expect((await put(other, `/v1/ai/outputs/${outId}/edit`, { text: 'tampered' })).status).toBe(
+      404,
+    );
+    expect(
+      (await post(other, `/v1/ai/outputs/${outId}/approve`, { acknowledgeUnverified: true }))
+        .status,
+    ).toBe(404);
+
+    // The requester can review and approve their own draft.
+    const ok = await post(attorney, `/v1/ai/outputs/${outId}/approve`, {
+      acknowledgeUnverified: true,
+    });
+    expect(ok.status, JSON.stringify(ok.body)).toBe(200);
+    expect(ok.body.reviewStatus).toBe('approved');
+
+    // And an approved client-level summary can never be published to a client portal.
+    expect((await put(attorney, `/v1/ai/outputs/${outId}/share`, { shared: true })).status).toBe(
+      404,
+    );
+  });
+
+  it('is rejected for the wrong inputs and roles', async () => {
+    const { owner, clientId, open } = await clientSetup();
+    const staff = await addMember(app, owner, 'staff');
+    const billing = await addMember(app, owner, 'billing');
+    expect((await start(staff, clientId)).status).toBe(403); // no ai:use
+    expect((await start(billing, clientId)).status).toBe(403);
+    expect((await start(owner, 'not-an-id')).status).toBe(400);
+    expect((await start(owner, '0'.repeat(24))).status).toBe(404);
+    expect((await start(owner, clientId, { instructions: 'x' })).status).toBe(400);
+    // The matter endpoint cannot be used to run a client-level task.
+    const wrong = await createJob(owner, {
+      task: 'case_history',
+      matterId: open.id,
+      documents: [{ documentId: '0'.repeat(24) }],
+    });
+    expect(wrong.status).toBe(400);
+  });
+
+  it('does not leak across organizations', async () => {
+    const a = await registerWithMfa(app, 'Alpha');
+    const b = await registerWithMfa(app, 'Beta');
+    const clientId = await newClient(a);
+    await newMatter(a, clientId);
+    expect((await start(b, clientId)).status).toBe(404);
+  });
+
+  it('fails clearly when the client has no visible matters', async () => {
+    const owner = await registerWithMfa(app);
+    const attorney = await addMember(app, owner, 'attorney');
+    const clientId = await newClient(owner);
+    await newMatter(owner, clientId, { restricted: true });
+    const job = await finished(attorney, (await start(attorney, clientId)).body.id);
+    expect(job.status).toBe('failed');
+    expect(job.error).toMatchObject({ code: 'SOURCE_UNAVAILABLE', retryable: false });
+    expect(grok.requests).toHaveLength(0); // nothing was sent to the model
+  });
+});
+
+describe('AI on scanned documents', () => {
+  it('summarises a scanned image using the text OCR read from it', async () => {
+    const { attorney, matter } = await setup();
+    const canvas = createCanvas(1400, 320);
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, 1400, 320);
+    ctx.fillStyle = '#000';
+    ctx.font = 'bold 48px sans-serif';
+    ctx.fillText('SETTLEMENT PROPOSAL', 60, 100);
+    ctx.fillText('Defendant offers payment in two instalments', 60, 190);
+    const scan = await uploadDocument(app, attorney, matter.id, {
+      title: 'Scanned proposal',
+      filename: 'proposal.png',
+      contentType: 'image/png',
+      content: canvas.toBuffer('image/png'),
+    });
+    // Reading a scan takes a moment; the AI job waits for the text rather than guessing.
+    await waitFor(
+      async () =>
+        (await attorney.agent.get(`/v1/documents/${scan.docId}`).expect(200)).body.versions[0].text,
+      (t) => t?.status === 'done' || t?.status === 'failed',
+      60_000,
+    );
+    const job = await runToEnd(attorney, {
+      task: 'summary',
+      matterId: matter.id,
+      documents: [{ documentId: scan.docId }],
+    });
+    expect(job.status, JSON.stringify(job.error)).toBe('succeeded');
+    expect(userPrompt(grok.requests.length - 1).toLowerCase()).toContain('settlement proposal');
+  }, 120_000);
 });

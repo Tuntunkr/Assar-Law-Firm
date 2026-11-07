@@ -4,10 +4,6 @@ import type { ClientContext } from '../common/auth-context';
 import { hmac, randomToken, sha256 } from '../common/crypto';
 import { ENV, type Env } from '../config/env';
 
-/** Different cookie names from staff, so one browser can hold both and neither can stand in for the other. */
-export const PORTAL_SESSION_COOKIE = 'assar_portal_sid';
-export const PORTAL_CSRF_COOKIE = 'assar_portal_csrf';
-
 @Injectable()
 export class ClientSessionService {
   constructor(@Inject(ENV) private readonly env: Env) {}

@@ -21,10 +21,16 @@
     "@assar/database": "workspace:*",
     "@assar/storage": "workspace:*",
     "@assar/types": "workspace:*",
+    "@napi-rs/canvas": "^1.0.11",
+    "@tesseract.js-data/eng": "^1.0.0",
+    "@tesseract.js-data/hin": "^1.0.0",
     "bullmq": "^6.3.15",
     "ioredis": "^6.0.0",
     "mammoth": "^1.13.0",
+    "sharp": "^0.35.5",
+    "tesseract.js": "^7.0.0",
     "unpdf": "^1.8.1",
+    "word-extractor": "^1.0.4",
     "zod": "^3.23.8"
   },
   "devDependencies": {

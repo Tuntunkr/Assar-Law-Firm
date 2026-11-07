@@ -5,9 +5,6 @@ import type { AuthContext } from '../common/auth-context';
 import { hmac, randomToken, sha256 } from '../common/crypto';
 import { ENV, type Env } from '../config/env';
 
-export const SESSION_COOKIE = 'assar_sid';
-export const CSRF_COOKIE = 'assar_csrf';
-
 @Injectable()
 export class SessionService {
   constructor(@Inject(ENV) private readonly env: Env) {}
@@ -79,6 +76,35 @@ export class SessionService {
       mfaEnabled: user.mfa.enabled,
       mfaEnrollmentRequired: roleRequiresMfa(membership.role) && !user.mfa.enabled,
     };
+  }
+
+  /** The user's active sessions, without any token material. */
+  async listFor(userId: string, currentTokenHash: string) {
+    const rows = await sessions.listForUser(userId);
+    return {
+      data: rows.map((s) => ({
+        id: String(s._id),
+        current: s.tokenHash === currentTokenHash,
+        ip: s.ip ?? null,
+        userAgent: s.userAgent ?? null,
+        createdAt: s.createdAt,
+        lastSeenAt: s.lastSeenAt,
+        expiresAt: s.absoluteExpiresAt,
+      })),
+    };
+  }
+
+  async revokeOne(
+    userId: string,
+    id: string,
+    currentTokenHash: string,
+  ): Promise<'ok' | 'current' | 'missing'> {
+    const rows = await sessions.listForUser(userId);
+    const target = rows.find((s) => String(s._id) === id);
+    if (!target) return 'missing';
+    if (target.tokenHash === currentTokenHash) return 'current';
+    await sessions.deleteOneForUser(userId, id);
+    return 'ok';
   }
 
   revoke(tokenHash: string) {

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { weakSecretReason } from '@assar/validation';
 
 const bool = z.enum(['true', 'false']).transform((v) => v === 'true');
 
@@ -21,6 +22,18 @@ const object = z.object({
   COOKIE_SECURE: bool.optional(),
   TRUST_PROXY: bool.default('false'),
   AUTH_RATE_LIMIT_PER_MIN: z.coerce.number().int().min(1).default(10),
+  /** Per signed-in user / portal user, across all routes. Shared via Redis, so it holds across replicas. */
+  PRINCIPAL_RATE_LIMIT_PER_MIN: z.coerce.number().int().min(1).default(600),
+  /** Per automation service token. */
+  SERVICE_RATE_LIMIT_PER_MIN: z.coerce.number().int().min(1).default(120),
+  MAX_JSON_BODY_BYTES: z.coerce
+    .number()
+    .int()
+    .min(1024)
+    .max(10 * 1024 * 1024)
+    .default(256 * 1024),
+  /** Previous MFA key, accepted for decryption while secrets are being re-encrypted (see rotate-mfa-key). */
+  MFA_ENCRYPTION_KEY_PREVIOUS: z.string().min(32).optional(),
   GLOBAL_RATE_LIMIT_PER_MIN: z.coerce.number().int().min(1).default(300),
   SESSION_IDLE_MINUTES: z.coerce.number().int().min(1).default(120),
   SESSION_ABSOLUTE_HOURS: z.coerce.number().int().min(1).default(24),
@@ -71,6 +84,18 @@ const schema = object.superRefine((env, ctx) => {
     }
   }
   if (env.NODE_ENV === 'production') {
+    for (const k of ['SESSION_SECRET', 'MFA_ENCRYPTION_KEY'] as const) {
+      const why = weakSecretReason(env[k]);
+      if (why) issue(k, `Not safe for production: ${why}`);
+    }
+    if (env.SESSION_SECRET === env.MFA_ENCRYPTION_KEY)
+      issue('MFA_ENCRYPTION_KEY', 'Must differ from SESSION_SECRET');
+    if (env.COOKIE_SECURE === false) issue('COOKIE_SECURE', 'Cookies must be Secure in production');
+    if (env.CORS_ORIGINS.length === 0) issue('CORS_ORIGINS', 'List the exact frontend origins');
+    for (const o of env.CORS_ORIGINS) {
+      if (o === '*' || !o.startsWith('https://'))
+        issue('CORS_ORIGINS', `"${o}" must be an https:// origin (no wildcards)`);
+    }
     if (env.STORAGE_DRIVER === 'local')
       issue('STORAGE_DRIVER', 'The local driver is for development only');
     if (env.SCAN_PROVIDER === 'disabled')

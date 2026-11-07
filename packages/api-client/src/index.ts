@@ -32,7 +32,7 @@ export interface ClientOptions {
   onUnauthenticated?: () => void;
 }
 
-class Http {
+export class Http {
   private csrf: string | null = null;
   constructor(private readonly o: ClientOptions) {}
 
@@ -40,16 +40,22 @@ class Http {
     this.csrf = token;
   }
 
+  /** Absolute URL for a path, for links the browser follows itself (e.g. CSV downloads). */
+  url(path: string) {
+    return `${this.o.baseUrl.replace(/\/$/, '')}${path}`;
+  }
+
   async request<T>(
     method: string,
     path: string,
     body?: unknown,
-    o: { auth?: boolean } = { auth: true },
+    o: { auth?: boolean; headers?: Record<string, string> } = { auth: true },
   ): Promise<T> {
     const doFetch = this.o.fetch ?? globalThis.fetch;
     const headers: Record<string, string> = { accept: 'application/json' };
     if (body !== undefined) headers['content-type'] = 'application/json';
     if (method !== 'GET' && this.csrf) headers['x-csrf-token'] = this.csrf;
+    Object.assign(headers, o.headers);
     let res: Response;
     try {
       res = await doFetch(`${this.o.baseUrl.replace(/\/$/, '')}${path}`, {
@@ -128,3 +134,5 @@ export function createPortalClient(options: ClientOptions) {
   };
 }
 export type PortalClient = ReturnType<typeof createPortalClient>;
+
+export * from './staff.js';

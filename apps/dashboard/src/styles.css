@@ -1,0 +1,85 @@
+@import 'tailwindcss';
+@import '@assar/ui/theme.css';
+@source "../../../packages/ui/src";
+@source "./";
+
+body {
+  font-family:
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
+  color: #0f1c36;
+  background: #f4f6fb;
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ---- Dark mode: the navy scale is inverted, so every component that uses it follows. ---- */
+.dark {
+  color-scheme: dark;
+  --color-navy-50: #16213a;
+  --color-navy-100: #1f2c49;
+  --color-navy-200: #2e3f62;
+  --color-navy-300: #4a5f88;
+  --color-navy-400: #6f86b3;
+  --color-navy-500: #8da3cc;
+  --color-navy-600: #a9bbdb;
+  --color-navy-700: #c3d0e8;
+  --color-navy-800: #dbe4f3;
+  --color-navy-900: #eef2fa;
+  --color-navy-950: #f6f8fc;
+}
+.dark body {
+  background: #0a1020;
+  color: #eef2fa;
+}
+.dark .bg-white {
+  background-color: #111a2e;
+}
+.dark .bg-white\/90 {
+  background-color: rgb(17 26 46 / 0.9);
+}
+.dark .bg-emerald-50,
+.dark .bg-blue-50,
+.dark .bg-indigo-50,
+.dark .bg-amber-50,
+.dark .bg-red-50 {
+  background-color: rgb(255 255 255 / 0.07);
+}
+.dark .border-emerald-300,
+.dark .border-red-300,
+.dark .border-amber-200 {
+  border-color: rgb(255 255 255 / 0.18);
+}
+.dark .text-emerald-900,
+.dark .text-emerald-800,
+.dark .text-emerald-700 {
+  color: #6ee7b7;
+}
+.dark .text-red-900,
+.dark .text-red-800,
+.dark .text-red-700 {
+  color: #fca5a5;
+}
+.dark .text-amber-900,
+.dark .text-amber-800,
+.dark .text-amber-700 {
+  color: #fcd34d;
+}
+.dark .text-accent-700 {
+  color: #93c5fd;
+}
+.dark input,
+.dark select,
+.dark textarea {
+  color-scheme: dark;
+}

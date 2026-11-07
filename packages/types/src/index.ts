@@ -23,6 +23,7 @@ export const PERMISSIONS = [
   'audit:read',
   'workflow:manage',
   'portal:manage',
+  'time:write',
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 
@@ -38,6 +39,7 @@ export type ErrorCode =
   | 'MFA_ENROLLMENT_REQUIRED'
   | 'ACCOUNT_LOCKED'
   | 'SERVICE_UNAVAILABLE'
+  | 'PAYLOAD_TOO_LARGE'
   | 'INTERNAL';
 
 export interface ApiErrorBody {
@@ -65,6 +67,8 @@ export const AI_TASKS = [
   'clause_review',
   'drafting',
   'missing_info',
+  /** Client-level: summarises the client's whole case file. Private to the requester. */
+  'case_history',
 ] as const;
 export type AiTask = (typeof AI_TASKS)[number];
 
@@ -91,6 +95,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'ai:use',
     'ai:approve',
     'portal:manage',
+    'time:write',
   ],
   paralegal: [
     'client:read',
@@ -103,6 +108,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'task:write',
     'calendar:write',
     'ai:use',
+    'time:write',
   ],
   billing: ['client:read', 'matter:read', 'billing:read', 'billing:write'],
   staff: ['client:read', 'matter:read', 'document:read', 'task:write', 'calendar:write'],
@@ -210,3 +216,32 @@ export interface PortalAiOutput {
   label: string;
   approvedAt: string;
 }
+
+// ---- Billing ----
+export const CURRENCIES = ['USD', 'EUR', 'GBP', 'CAD', 'AUD', 'INR', 'AED', 'SGD'] as const;
+export type Currency = (typeof CURRENCIES)[number];
+export const INVOICE_STATUSES = ['draft', 'issued', 'paid', 'void'] as const;
+export type InvoiceStatus = (typeof INVOICE_STATUSES)[number];
+export const PAYMENT_METHODS = ['bank_transfer', 'card', 'cash', 'check', 'other'] as const;
+export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
+export const INVOICE_LINE_TYPES = ['time', 'expense', 'adjustment'] as const;
+export type InvoiceLineType = (typeof INVOICE_LINE_TYPES)[number];
+
+/** Largest single amount accepted anywhere: 10,000,000.00 in the smallest currency unit. */
+export const MAX_AMOUNT_CENTS = 1_000_000_000;
+
+/**
+ * Money for a number of minutes at an hourly rate, in cents, rounded half up using integers only
+ * (no floating point), so totals are exact and reproducible.
+ */
+export function timeAmountCents(minutes: number, hourlyRateCents: number): number {
+  return Math.floor((minutes * hourlyRateCents + 30) / 60);
+}
+
+/** Tax in cents for `amountCents` at `rateBp` basis points (825 = 8.25%), rounded half up, integers only. */
+export function taxAmountCents(amountCents: number, rateBp: number): number {
+  const sign = amountCents < 0 ? -1 : 1;
+  return sign * Math.floor((Math.abs(amountCents) * rateBp + 5000) / 10000);
+}
+export * from './templates.js';
+export * from './reminders.js';

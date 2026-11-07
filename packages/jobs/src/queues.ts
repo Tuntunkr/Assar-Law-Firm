@@ -3,6 +3,7 @@ import {
   QUEUE_NAMES,
   type AiJobData,
   type EventSink,
+  type ExtractJobData,
   type ScanJobData,
   type WorkflowEventData,
 } from './names.js';
@@ -26,6 +27,7 @@ const FAILED = { age: 7 * 24 * 3600, count: 5000 };
 /** Producer side: used by the API. Workers consume with {@link startWorkers}. */
 export class JobQueues implements EventSink {
   readonly scan: Queue<ScanJobData>;
+  readonly extract: Queue<ExtractJobData>;
   readonly ai: Queue<AiJobData>;
   readonly events: Queue<WorkflowEventData>;
   readonly prefix: string;
@@ -34,10 +36,12 @@ export class JobQueues implements EventSink {
     this.prefix = options.prefix ?? 'bull';
     const connection = parseRedisUrl(options.redisUrl);
     this.scan = new Queue(QUEUE_NAMES.scan, { connection, prefix: this.prefix });
+    this.extract = new Queue(QUEUE_NAMES.extract, { connection, prefix: this.prefix });
     this.ai = new Queue(QUEUE_NAMES.ai, { connection, prefix: this.prefix });
     this.events = new Queue(QUEUE_NAMES.events, { connection, prefix: this.prefix });
     // Connection errors are surfaced through health checks; don't crash the process on a blip.
     this.scan.on('error', () => undefined);
+    this.extract.on('error', () => undefined);
     this.ai.on('error', () => undefined);
     this.events.on('error', () => undefined);
   }
@@ -56,6 +60,14 @@ export class JobQueues implements EventSink {
     return this.scan.add('scan', data, {
       ...this.opts(this.options.scanAttempts ?? 3),
       jobId: `scan-${data.versionId}-${run}`,
+    });
+  }
+
+  /** `run` makes the id unique per request so a manual re-run is not deduplicated against an old job. */
+  enqueueExtract(data: ExtractJobData, run: string) {
+    return this.extract.add('extract', data, {
+      ...this.opts(this.options.scanAttempts ?? 3),
+      jobId: `extract-${data.versionId}-${run}`,
     });
   }
 
@@ -96,12 +108,13 @@ export class JobQueues implements EventSink {
 
   async counts() {
     const names = ['waiting', 'active', 'delayed', 'failed', 'completed'] as const;
-    const [scan, ai, events] = await Promise.all([
+    const [scan, extract, ai, events] = await Promise.all([
       this.scan.getJobCounts(...names),
+      this.extract.getJobCounts(...names),
       this.ai.getJobCounts(...names),
       this.events.getJobCounts(...names),
     ]);
-    return { scan, ai, events };
+    return { scan, extract, ai, events };
   }
 
   /** Throws if Redis is unreachable (or doesn't answer within `timeoutMs`). */
@@ -115,6 +128,11 @@ export class JobQueues implements EventSink {
   }
 
   async close() {
-    await Promise.all([this.scan.close(), this.ai.close(), this.events.close()]);
+    await Promise.all([
+      this.scan.close(),
+      this.extract.close(),
+      this.ai.close(),
+      this.events.close(),
+    ]);
   }
 }

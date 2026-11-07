@@ -1,6 +1,14 @@
 import { z } from 'zod';
 import {
   AI_TASKS,
+  MAX_PLACEHOLDER_VALUE_CHARS,
+  MAX_TEMPLATE_CHARS,
+  TEMPLATE_CATEGORIES,
+  CURRENCIES,
+  MAX_AMOUNT_CENTS,
+  MAX_REMINDER_STEPS,
+  REMINDER_CHANNELS,
+  PAYMENT_METHODS,
   CLIENT_TYPES,
   MATTER_STATUSES,
   PARTY_ROLES,
@@ -53,6 +61,8 @@ export const changePasswordSchema = z.object({
   newPassword: passwordSchema,
 });
 
+export const updateProfileSchema = z.object({ name: z.string().trim().min(2).max(100) });
+
 export const totpCodeSchema = z.string().regex(/^\d{6}$/, 'Enter the 6-digit code');
 export const mfaEnableSchema = z.object({ code: totpCodeSchema });
 export const mfaDisableSchema = z.object({
@@ -100,11 +110,32 @@ export const clientListQuerySchema = paginationSchema.extend({
   status: z.enum(['active', 'archived']).optional(),
 });
 
+/** A calendar day kept as the plain string `YYYY-MM-DD`, so it never shifts with time zones. */
+const dateOnly = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD')
+  .refine((s) => {
+    // `toISOString` throws on an invalid date (e.g. Feb 31), so check validity first.
+    const d = new Date(`${s}T00:00:00.000Z`);
+    return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s;
+  }, 'Not a real date');
+
+/** Where the case is being heard. Every field is optional; an empty object is treated as "no court". */
+export const courtSchema = z.object({
+  name: optionalText(200),
+  caseNumber: optionalText(100),
+  judge: optionalText(150),
+  courtroom: optionalText(100),
+  jurisdiction: optionalText(150),
+  filedOn: dateOnly.optional(),
+});
+
 export const createMatterSchema = z.object({
   clientId: objectIdSchema,
   title: z.string().trim().min(2).max(200),
   practiceArea: z.enum(PRACTICE_AREAS),
   description: optionalText(5000),
+  court: courtSchema.optional(),
   leadAttorneyId: objectIdSchema.optional(),
   teamIds: z.array(objectIdSchema).max(20).default([]),
   restricted: z.boolean().default(false),
@@ -116,6 +147,7 @@ export const updateMatterSchema = z
     title: z.string().trim().min(2).max(200),
     practiceArea: z.enum(PRACTICE_AREAS),
     description: optionalText(5000),
+    court: courtSchema.nullable(),
     status: z.enum(MATTER_STATUSES),
     leadAttorneyId: objectIdSchema.nullable(),
     teamIds: z.array(objectIdSchema).max(20),
@@ -198,7 +230,37 @@ export const createDocumentSchema = z.object({
 });
 export const newVersionSchema = z.object(uploadFields);
 export const renameDocumentSchema = z.object({ title: z.string().trim().min(1).max(250) });
+/** Timeline paging: pass the `before` of the previous page's last entry to get older ones. */
+export const timelineQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(100).default(30),
+  before: z
+    .string()
+    .datetime({ offset: true })
+    .transform((v) => new Date(v))
+    .optional(),
+});
+
+/** Search inside the text of documents (including scans read by OCR). */
+export const textSearchQuerySchema = z.object({
+  q: z.string().trim().min(2).max(200),
+  matterId: objectIdSchema.optional(),
+  clientId: objectIdSchema.optional(),
+  limit: z.coerce.number().int().min(1).max(25).default(10),
+});
+export const documentTextQuerySchema = z.object({
+  full: z
+    .enum(['true', 'false'])
+    .transform((v) => v === 'true')
+    .default('false'),
+});
+
 export const documentListQuerySchema = paginationSchema;
+/** Firm-wide document search: by title, matter or client. Restricted matters are filtered server-side. */
+export const documentSearchQuerySchema = paginationSchema.extend({
+  q: z.string().trim().min(1).max(100).optional(),
+  matterId: objectIdSchema.optional(),
+  clientId: objectIdSchema.optional(),
+});
 
 // ---- Calendar & tasks ----
 const isoDate = z
@@ -274,7 +336,7 @@ export const taskListQuerySchema = paginationSchema.extend({
 // ---- AI ----
 export const createAiJobSchema = z
   .object({
-    task: z.enum(AI_TASKS),
+    task: z.enum(AI_TASKS).refine((t) => t !== 'case_history', 'Use the client summary request'),
     matterId: objectIdSchema,
     /** Source documents. Omit `version` to use the latest scanned (clean) version. */
     documents: z
@@ -301,13 +363,21 @@ export const createAiJobSchema = z
     }
   });
 
+/** A summary of a client's whole case file. `instructions` can focus it (e.g. "pending deadlines"). */
+export const createClientSummarySchema = z.object({
+  clientId: objectIdSchema,
+  instructions: z.string().trim().min(3).max(1000).optional(),
+});
+
 export const aiJobListQuerySchema = paginationSchema.extend({
   matterId: objectIdSchema.optional(),
+  clientId: objectIdSchema.optional(),
   status: z.enum(['queued', 'processing', 'succeeded', 'failed', 'cancelled']).optional(),
   task: z.enum(AI_TASKS).optional(),
 });
 export const aiOutputListQuerySchema = paginationSchema.extend({
   matterId: objectIdSchema.optional(),
+  clientId: objectIdSchema.optional(),
   reviewStatus: z.enum(['draft', 'approved', 'rejected']).optional(),
   task: z.enum(AI_TASKS).optional(),
 });
@@ -318,6 +388,37 @@ export const approveAiOutputSchema = z.object({
 });
 export const rejectAiOutputSchema = z.object({ reason: z.string().trim().min(3).max(2000) });
 export const editAiOutputSchema = z.object({ text: z.string().trim().min(1).max(100_000) });
+
+// ---- Document templates ----
+const templateFields = {
+  name: z.string().trim().min(2).max(150),
+  category: z.enum(TEMPLATE_CATEGORIES),
+  description: optionalText(500),
+  body: z.string().min(10).max(MAX_TEMPLATE_CHARS),
+};
+export const createTemplateSchema = z.object(templateFields);
+export const updateTemplateSchema = z
+  .object({
+    ...templateFields,
+    description: templateFields.description.nullable(),
+    status: z.enum(['active', 'archived']),
+  })
+  .partial()
+  .refine((v) => Object.keys(v).length > 0, 'Provide at least one field');
+export const templateListQuerySchema = z.object({
+  status: z.enum(['active', 'archived']).default('active'),
+  category: z.enum(TEMPLATE_CATEGORIES).optional(),
+});
+/** Fill a template: facts come from the matter; anything else is supplied in `values`. */
+export const renderTemplateSchema = z.object({
+  matterId: objectIdSchema.optional(),
+  values: z
+    .record(
+      z.string().regex(/^[a-z][a-z0-9_.]{0,60}$/),
+      z.string().max(MAX_PLACEHOLDER_VALUE_CHARS),
+    )
+    .default({}),
+});
 
 // ---- Client portal ----
 export const portalLoginSchema = z.object({
@@ -375,3 +476,166 @@ export const automationTaskSchema = z.object({
   priority: z.enum(['low', 'normal', 'high']).default('normal'),
   dueAt: isoDate.optional(),
 });
+
+// ---- Billing ----
+/** A calendar day, `YYYY-MM-DD`, validated as a real date and returned as UTC midnight. */
+export const ymdSchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD')
+  .transform((s, ctx) => {
+    const d = new Date(`${s}T00:00:00.000Z`);
+    if (Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== s) {
+      ctx.addIssue({ code: 'custom', message: 'Not a real date' });
+      return z.NEVER;
+    }
+    return d;
+  });
+
+const cents = z.number().int().min(0).max(MAX_AMOUNT_CENTS);
+
+export const createTimeEntrySchema = z.object({
+  matterId: objectIdSchema,
+  workDate: ymdSchema,
+  minutes: z.number().int().min(1).max(1440),
+  description: z.string().trim().min(3).max(1000),
+  billable: z.boolean().default(true),
+  /** Overrides the default rate. Needs billing:write. */
+  rateCents: cents.optional(),
+});
+export const updateTimeEntrySchema = z
+  .object({
+    matterId: objectIdSchema,
+    workDate: ymdSchema,
+    minutes: z.number().int().min(1).max(1440),
+    description: z.string().trim().min(3).max(1000),
+    billable: z.boolean(),
+    rateCents: cents,
+  })
+  .partial()
+  .refine((v) => Object.keys(v).length > 0, 'Provide at least one field');
+export const timeListQuerySchema = paginationSchema.extend({
+  matterId: objectIdSchema.optional(),
+  clientId: objectIdSchema.optional(),
+  userId: objectIdSchema.optional(),
+  status: z.enum(['unbilled', 'invoiced']).optional(),
+  billable: z
+    .enum(['true', 'false'])
+    .transform((v) => v === 'true')
+    .optional(),
+  from: ymdSchema.optional(),
+  to: ymdSchema.optional(),
+});
+
+export const billingSettingsSchema = z.object({
+  currency: z.enum(CURRENCIES),
+  defaultHourlyRateCents: cents.nullable(),
+  /** Basis points: 825 = 8.25%. */
+  defaultTaxRateBp: z.number().int().min(0).max(10000),
+  invoiceDueDays: z.number().int().min(0).max(365),
+  /** When to remind about an unpaid invoice, in days from its due date (negative = before). */
+  reminderDays: z
+    .array(z.number().int().min(-30).max(365))
+    .max(MAX_REMINDER_STEPS)
+    .transform((a) => [...new Set(a)].sort((x, y) => x - y))
+    .optional(),
+});
+export const memberRateSchema = z.object({ hourlyRateCents: cents.nullable() });
+
+export const createInvoiceSchema = z.object({
+  clientId: objectIdSchema,
+  /** Bill these specific time entries... */
+  timeEntryIds: z.array(objectIdSchema).max(500).optional(),
+  /** ...or every unbilled billable entry on these matters. */
+  matterIds: z.array(objectIdSchema).max(50).optional(),
+  dueDays: z.number().int().min(0).max(365).optional(),
+  taxRateBp: z.number().int().min(0).max(10000).optional(),
+  notes: z.string().trim().max(2000).optional(),
+});
+export const updateInvoiceSchema = z
+  .object({
+    dueDays: z.number().int().min(0).max(365),
+    taxRateBp: z.number().int().min(0).max(10000),
+    notes: z.string().trim().max(2000).nullable(),
+  })
+  .partial()
+  .refine((v) => Object.keys(v).length > 0, 'Provide at least one field');
+export const addInvoiceLineSchema = z
+  .object({
+    type: z.enum(['expense', 'adjustment']),
+    description: z.string().trim().min(3).max(1000),
+    /** Expenses are positive; adjustments (discounts) may be negative. */
+    amountCents: z.number().int().min(-MAX_AMOUNT_CENTS).max(MAX_AMOUNT_CENTS),
+    matterId: objectIdSchema.optional(),
+  })
+  .refine((v) => v.amountCents !== 0, { message: 'Amount cannot be zero', path: ['amountCents'] })
+  .refine((v) => v.type === 'adjustment' || v.amountCents > 0, {
+    message: 'Expenses must be positive; use an adjustment for a discount',
+    path: ['amountCents'],
+  });
+export const recordPaymentSchema = z.object({
+  amountCents: z.number().int().min(1).max(MAX_AMOUNT_CENTS),
+  paidAt: isoDate.optional(),
+  method: z.enum(PAYMENT_METHODS),
+  reference: z.string().trim().max(200).optional(),
+});
+export const voidInvoiceSchema = z.object({ reason: z.string().trim().min(3).max(500) });
+/** Records that someone contacted the client about an unpaid invoice (email, WhatsApp, a call, a letter…). */
+export const logInvoiceReminderSchema = z.object({
+  channel: z.enum(REMINDER_CHANNELS),
+  note: z.string().trim().max(500).optional(),
+});
+export const invoiceListQuerySchema = paginationSchema.extend({
+  overdue: z
+    .enum(['true', 'false'])
+    .transform((v) => v === 'true')
+    .optional(),
+  clientId: objectIdSchema.optional(),
+  status: z.enum(['draft', 'issued', 'paid', 'void']).optional(),
+});
+
+const MAX_REPORT_MS = 366 * 24 * 3600_000;
+/** Zod still runs refinements after a field failed to parse, so they must tolerate non-dates. */
+const isDate = (...v: unknown[]) => v.every((x) => x instanceof Date && !Number.isNaN(x.getTime()));
+export const reportRangeSchema = z
+  .object({ from: ymdSchema, to: ymdSchema })
+  .refine((v) => !isDate(v.from, v.to) || v.to > v.from, {
+    message: '`to` must be after `from`',
+    path: ['to'],
+  })
+  .refine((v) => !isDate(v.from, v.to) || v.to.getTime() - v.from.getTime() <= MAX_REPORT_MS, {
+    message: 'Range may not exceed 366 days',
+    path: ['to'],
+  });
+export const timeReportQuerySchema = z
+  .object({
+    from: ymdSchema,
+    to: ymdSchema,
+    groupBy: z.enum(['user', 'matter', 'client']).default('user'),
+    userId: objectIdSchema.optional(),
+  })
+  .refine((v) => !isDate(v.from, v.to) || v.to > v.from, {
+    message: '`to` must be after `from`',
+    path: ['to'],
+  })
+  .refine((v) => !isDate(v.from, v.to) || v.to.getTime() - v.from.getTime() <= MAX_REPORT_MS, {
+    message: 'Range may not exceed 366 days',
+    path: ['to'],
+  });
+
+// ---- Secret hygiene ----
+const PLACEHOLDER =
+  /change[-_ ]?me|changeme|example|placeholder|your[-_ ]?(secret|key)|default|password|secret[-_]?key|insecure|dummy|todo|xxxx|0000|1234|abcd|test[-_]?(secret|key)/i;
+
+/**
+ * Why a secret should not be used in production, or `null` if it looks acceptable. This cannot prove a
+ * secret is strong; it catches the mistakes people actually make: copied placeholders, short values,
+ * repeated characters and keys reused for two purposes.
+ */
+export function weakSecretReason(value: string, minLength = 32): string | null {
+  if (value.length < minLength) return `shorter than ${minLength} characters`;
+  if (PLACEHOLDER.test(value)) return 'looks like a placeholder or example value';
+  if (new Set(value).size < Math.min(12, Math.floor(minLength / 2)))
+    return 'has too few distinct characters';
+  if (/^(.)\1+$/.test(value) || /^(..+?)\1+$/.test(value)) return 'is a repeated pattern';
+  return null;
+}

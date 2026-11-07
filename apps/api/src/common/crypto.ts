@@ -38,6 +38,20 @@ export function encryptSecret(plain: string, secret: string): string {
   ].join('.');
 }
 
+/** Tries each key in turn (current first). AES-GCM authentication makes a wrong key fail cleanly, never return garbage. */
+export function decryptWithKeys(payload: string, keys: (string | undefined)[]): string {
+  let last: unknown = new Error('No decryption key configured');
+  for (const k of keys) {
+    if (!k) continue;
+    try {
+      return decryptSecret(payload, k);
+    } catch (e) {
+      last = e;
+    }
+  }
+  throw last;
+}
+
 export function decryptSecret(payload: string, secret: string): string {
   const [version, iv, tag, data] = payload.split('.');
   if (version !== 'v1' || !iv || !tag || !data) throw new Error('Unsupported ciphertext');

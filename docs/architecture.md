@@ -132,15 +132,15 @@ Each phase ends with: lint, typecheck, tests, and production build run and resul
 
 ## 13. Implementation status (as built)
 
-| Phase | State | Notes |
-|---|---|---|
-| 1 Foundation, 2 Marketing site | done | `apps/web`, `packages/ui` |
-| 3 Auth & organizations | done | API, `packages/database` |
-| 4 Clients, matters, teams, conflicts, matter access | done | `MatterAccessService` is the single access policy |
-| 5 Documents, calendar, tasks | done | private storage, signed URLs, scan hook |
-| 6 AI Copilot & worker | done | `packages/jobs`, `packages/storage`, `apps/worker`; drafts until approved |
-| 7 Client portal & n8n workflows | done | `apps/client-portal`, `packages/api-client`, `services/workflows`; see `docs/api/client-portal.md`, `docs/api/automation.md` |
-| 8 Billing/reports, security hardening | **not started** | no billing module, no dashboard UI, no pentest |
-| 9 Deployment docs & pilot readiness | **not started** | Docker/Compose files unverified; no production deployment |
+| Phase                                               | State           | Notes                                                                                                                                                                                                                                                             |
+| --------------------------------------------------- | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1 Foundation, 2 Marketing site                      | done            | `apps/web`, `packages/ui`                                                                                                                                                                                                                                         |
+| 3 Auth & organizations                              | done            | API, `packages/database`                                                                                                                                                                                                                                          |
+| 4 Clients, matters, teams, conflicts, matter access | done            | `MatterAccessService` is the single access policy                                                                                                                                                                                                                 |
+| 5 Documents, calendar, tasks                        | done            | private storage, signed URLs, scan hook                                                                                                                                                                                                                           |
+| 6 AI Copilot & worker                               | done            | `packages/jobs`, `packages/storage`, `apps/worker`; drafts until approved                                                                                                                                                                                         |
+| 7 Client portal & n8n workflows                     | done            | `apps/client-portal`, `packages/api-client`, `services/workflows`; see `docs/api/client-portal.md`, `docs/api/automation.md`                                                                                                                                      |
+| 8 Billing/reports, security hardening               | **in progress** | API done, uncommitted: billing (time, invoices, reports, CSV), `__Host-` cookies, Redis rate limits, MFA key rotation, Mongo backup scripts. Dashboard UI built (`apps/dashboard`, see `docs/dashboard-plan.md`). Open: document upload in the dashboard, pentest |
+| 9 Deployment docs & pilot readiness                 | **not started** | Docker/Compose files unverified; no production deployment                                                                                                                                                                                                         |
 
 Deviations from the original plan: `packages/storage` and `packages/jobs` were added (the API and worker share them and apps may not import each other); the client portal is a separate principal with its own cookies; automation uses scoped service tokens on a dedicated `/v1/automation` surface rather than acting as users.

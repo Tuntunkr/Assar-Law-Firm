@@ -4,12 +4,13 @@ import {
   aiOutputListQuerySchema,
   approveAiOutputSchema,
   createAiJobSchema,
+  createClientSummarySchema,
   editAiOutputSchema,
   rejectAiOutputSchema,
 } from '@assar/validation';
 import type { z } from 'zod';
 import type { AppRequest, AuthContext } from '../common/auth-context';
-import { Auth, Idempotent, RequirePermissions } from '../common/decorators';
+import { Auth, Idempotent, RateLimit, RequirePermissions } from '../common/decorators';
 import { ObjectIdPipe } from '../common/object-id.pipe';
 import { ZodPipe } from '../common/zod.pipe';
 import { AiService } from './ai.service';
@@ -19,6 +20,7 @@ export class AiController {
   constructor(private readonly ai: AiService) {}
 
   @RequirePermissions('ai:use')
+  @RateLimit({ name: 'ai-create', limit: 20, windowSeconds: 60 }) // each job costs money
   @Idempotent({ optional: true })
   @HttpCode(202)
   @Post('jobs')
@@ -28,6 +30,18 @@ export class AiController {
     @Req() req: AppRequest,
   ) {
     return this.ai.create(auth, body, req);
+  }
+
+  @RequirePermissions('ai:use', 'client:read', 'matter:read')
+  @RateLimit({ name: 'ai-create', limit: 20, windowSeconds: 60 })
+  @HttpCode(202)
+  @Post('client-summaries')
+  createClientSummary(
+    @Auth() auth: AuthContext,
+    @Body(new ZodPipe(createClientSummarySchema)) body: z.infer<typeof createClientSummarySchema>,
+    @Req() req: AppRequest,
+  ) {
+    return this.ai.createClientSummary(auth, body, req);
   }
 
   @RequirePermissions('ai:use')

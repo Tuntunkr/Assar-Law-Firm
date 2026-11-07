@@ -5,7 +5,7 @@ A separate web app (`apps/client-portal`) and a separate principal. Clients see 
 ## Principal & sessions
 
 - Portal users (`client_users`) belong to exactly one organization and one client. They sign in with `{organizationSlug, email, password}` (the same email can exist at several firms). Accounts are created from a single-use, 7-day invitation issued by staff.
-- Session cookie `assar_portal_sid` (HttpOnly, SameSite=Lax, Secure in production) + CSRF cookie `assar_portal_csrf`; same idle/absolute timeouts as staff. Staff cookies (`assar_sid`) are different and are never accepted on portal routes, and portal cookies are never accepted on staff routes (tested, including with the raw token moved between cookie names).
+- Session cookie `assar_portal_sid` (HttpOnly, SameSite=Lax, Secure in production) + CSRF cookie `assar_portal_csrf`; same idle/absolute timeouts as staff. When cookies are Secure (`COOKIE_SECURE`) both get the `__Host-` prefix (`__Host-assar_portal_sid`, `__Host-assar_portal_csrf`), and sign-out clears them with matching Secure/Path attributes. Staff cookies (`assar_sid`, `__Host-assar_sid` when Secure) are different and are never accepted on portal routes, and portal cookies are never accepted on staff routes (tested, including with the raw token moved between cookie names).
 - Failed sign-ins return one generic error; 5 failures lock the account for 15 minutes; sign-in is rate limited. MFA is not offered to clients yet.
 - Disabling a portal user, or archiving their client, ends their sessions immediately.
 

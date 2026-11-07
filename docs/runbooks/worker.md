@@ -9,6 +9,7 @@ Consumes two BullMQ queues from Redis: `scan` (virus-scan uploaded files) and `a
 See `.env.example` ("Worker"). Required: `MONGODB_URI`, `REDIS_URL`, storage settings identical to the API's (`STORAGE_DRIVER` and S3 settings, or for local dev `SESSION_SECRET` + `STORAGE_LOCAL_DIR` + `PUBLIC_API_URL`), `QUEUE_PREFIX` identical to the API's.
 
 - Scanning: `SCAN_PROVIDER=clamav` with `CLAMAV_HOST/PORT`. `disabled` is development-only and refused in production.
+- Reading documents: after a file passes the scan the worker reads its text (Word, PDF, RTF, ODT, XLSX, e-mail, text) and, for scans and images, runs **OCR with the built-in Tesseract**. Nothing is sent to any outside service; the language data ships with the worker. Settings: `OCR_ENABLED` (default `true`), `OCR_LANGUAGES` (`eng`, `hin`, or `eng+hin`), `OCR_MAX_PAGES` (default 40 per document; the rest is skipped and the result is marked partial), `EXTRACT_CONCURRENCY` (default 1: OCR uses a whole CPU core, and a 40-page scan can take a few minutes). Give the worker at least 1 GB of memory when OCR is on. With `OCR_ENABLED=false`, scans fail with a clear message instead of being skipped silently.
 - AI: set `GROK_API_KEY` **and** `GROK_MODEL` (no default model). Without a key the worker still scans files, and AI jobs are not processed, so also keep `AI_ENABLED=false` on the API.
 - Startup fails fast with a list of invalid settings (values are never printed).
 
@@ -24,14 +25,16 @@ See `.env.example` ("Worker"). Required: `MONGODB_URI`, `REDIS_URL`, storage set
 
 ## Common situations
 
-| Symptom                            | Likely cause / action                                                                                                                                                                                                  |
-| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Uploads stay `scanning`            | No worker running, or ClamAV unreachable (retries then `scan_failed`). Start a worker; after fixing ClamAV call `POST /documents/:id/versions/:n/rescan`.                                                              |
-| Versions `scan_failed`             | ClamAV down for all retries. Fix, then `rescan`.                                                                                                                                                                       |
-| AI jobs stay `queued`              | No worker with Grok configured. Check `/status` → `aiEnabled`.                                                                                                                                                         |
-| AI jobs fail `AI_AUTH_FAILED`      | `GROK_API_KEY` invalid/revoked. Rotate the key in the worker's environment and restart; users can retry failed jobs.                                                                                                   |
-| Job `failed` with `WORKER_STALLED` | Worker crashed repeatedly mid-job. Check logs/OOM; retry the job.                                                                                                                                                      |
-| Redis outage                       | API returns 503 for new uploads-complete/AI requests (nothing is left half-queued). Existing state is in MongoDB. Jobs already in Redis are lost only if Redis loses its data: enable persistence (AOF) in production. |
+| Symptom                              | Likely cause / action                                                                                                                                                                                                  |
+| ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Uploads stay `scanning`              | No worker running, or ClamAV unreachable (retries then `scan_failed`). Start a worker; after fixing ClamAV call `POST /documents/:id/versions/:n/rescan`.                                                              |
+| Versions `scan_failed`               | ClamAV down for all retries. Fix, then `rescan`.                                                                                                                                                                       |
+| Scanned file shows "text unreadable" | Blank or very poor scan, or OCR is off. Check `OCR_ENABLED`; users can retry with "Read again" (`POST /documents/:id/versions/:n/extract`). Low-confidence scans (under 70%) are flagged in the dashboard.             |
+| Text never appears for new uploads   | The worker is not consuming the `assar-extract` queue, or the version is not `clean` (infected and unscanned files are never opened). Check `/status` → `extract`.                                                     |
+| AI jobs stay `queued`                | No worker with Grok configured. Check `/status` → `aiEnabled`.                                                                                                                                                         |
+| AI jobs fail `AI_AUTH_FAILED`        | `GROK_API_KEY` invalid/revoked. Rotate the key in the worker's environment and restart; users can retry failed jobs.                                                                                                   |
+| Job `failed` with `WORKER_STALLED`   | Worker crashed repeatedly mid-job. Check logs/OOM; retry the job.                                                                                                                                                      |
+| Redis outage                         | API returns 503 for new uploads-complete/AI requests (nothing is left half-queued). Existing state is in MongoDB. Jobs already in Redis are lost only if Redis loses its data: enable persistence (AOF) in production. |
 
 ## Deploy / rollback
 

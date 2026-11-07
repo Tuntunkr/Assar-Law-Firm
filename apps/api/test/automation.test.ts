@@ -32,7 +32,7 @@ import {
   type TestWorkers,
 } from './helpers';
 
-const SECRET = 'n8n-shared-secret-for-tests-0123456789';
+const SECRET = 'n8n-shared-secret-for-tests-0123456789'; // secrets:ignore (fake shared secret used only against a local fake n8n)
 let app: INestApplication;
 let clamd: Awaited<ReturnType<typeof startFakeClamd>>;
 let grok: Awaited<ReturnType<typeof startFakeGrok>>;

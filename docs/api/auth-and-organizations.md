@@ -6,8 +6,8 @@ Base path `/v1`. Health: `GET /healthz` (liveness), `GET /readyz` (MongoDB reach
 
 - **Errors:** `{ "error": { "code", "message", "requestId", "details?" } }`. Codes: `VALIDATION_FAILED, UNAUTHENTICATED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, IDEMPOTENCY_MISMATCH, MFA_REQUIRED, MFA_ENROLLMENT_REQUIRED, ACCOUNT_LOCKED, INTERNAL`.
 - **Pagination:** `?limit=1..100&cursor=<opaque>` → `{ data, page: { nextCursor, limit } }`.
-- **Sessions:** opaque token in `assar_sid` (HttpOnly, SameSite=Lax, Secure in production). Only a SHA-256 hash is stored. Idle timeout `SESSION_IDLE_MINUTES`, absolute `SESSION_ABSOLUTE_HOURS`.
-- **CSRF:** every non-GET authenticated request must send `X-CSRF-Token` (value from login response / `assar_csrf` cookie). A browser `Origin` header must be in `CORS_ORIGINS`.
+- **Sessions:** opaque token in `assar_sid` (HttpOnly, SameSite=Lax, Secure in production). When cookies are Secure (`COOKIE_SECURE`) the name gets a `__Host-` prefix (`__Host-assar_sid`), so browsers only accept it if it is Secure, `Path=/` and has no `Domain`; this stops a sibling subdomain planting or overwriting a session cookie. The unprefixed name is ignored in that mode. Sign-out clears the cookies with the same Secure/Path attributes, which browsers require for `__Host-` cookies. Only a SHA-256 hash is stored. Idle timeout `SESSION_IDLE_MINUTES`, absolute `SESSION_ABSOLUTE_HOURS`.
+- **CSRF:** every non-GET authenticated request must send `X-CSRF-Token` (value from login response / `assar_csrf` cookie, `__Host-assar_csrf` when Secure). A browser `Origin` header must be in `CORS_ORIGINS`.
 - **Idempotency:** routes marked below require `Idempotency-Key` (8-128 chars). Replays return the stored response with `Idempotent-Replayed: true`; secrets (e.g. invitation `token`) are not stored, so a replay omits them.
 - **Rate limits:** auth endpoints `AUTH_RATE_LIMIT_PER_MIN` per IP; global `GLOBAL_RATE_LIMIT_PER_MIN`. Counters are in-memory (per instance).
 

@@ -2,6 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import {
   aiJobs,
   aiOutputs,
+  clients,
   documents,
   documentVersions,
   type AiJobDoc,
@@ -15,6 +16,7 @@ import type {
   aiOutputListQuerySchema,
   approveAiOutputSchema,
   createAiJobSchema,
+  createClientSummarySchema,
 } from '@assar/validation';
 import { AuditService } from '../audit/audit.service';
 import type { AppRequest, AuthContext } from '../common/auth-context';
@@ -28,7 +30,8 @@ const idStr = (v: unknown) => (v == null ? null : String(v));
 
 export const jobDto = (j: AiJobDoc) => ({
   id: String(j._id),
-  matterId: String(j.matterId),
+  matterId: idStr(j.matterId),
+  clientId: idStr(j.clientId),
   task: j.task,
   status: j.status,
   /** What the worker is really doing right now (null unless processing). Not a progress estimate. */
@@ -56,7 +59,8 @@ const LABELS = {
 export const outputDto = (o: AiOutputDoc) => ({
   id: String(o._id),
   jobId: String(o.jobId),
-  matterId: String(o.matterId),
+  matterId: idStr(o.matterId),
+  clientId: idStr(o.clientId),
   task: o.task,
   /** Always true: nothing here is human-authored unless `editedText` says so. */
   aiGenerated: true,
@@ -166,6 +170,55 @@ export class AiService {
     return jobDto(job);
   }
 
+  /**
+   * A summary of a client's case history across every matter the requester can see. The result is
+   * private to the requester: it may mention matters other staff cannot see.
+   */
+  async createClientSummary(
+    auth: AuthContext,
+    input: z.infer<typeof createClientSummarySchema>,
+    req: Req,
+  ) {
+    this.ensureEnabled();
+    const orgId = auth.organizationId;
+    const clientId = input.clientId;
+    if (!hasPermission(auth.role, 'client:read') || !hasPermission(auth.role, 'matter:read'))
+      throw new ApiError(403, 'FORBIDDEN', 'You do not have permission to summarise client files');
+    if (!(await clients.findById(orgId, clientId)))
+      throw new ApiError(404, 'NOT_FOUND', 'Client not found');
+    if ((await aiJobs.countActive(orgId)) >= this.env.AI_MAX_ACTIVE_JOBS_PER_ORG) {
+      throw new ApiError(
+        429,
+        'RATE_LIMITED',
+        'Too many AI jobs are already in progress. Wait for one to finish.',
+      );
+    }
+    const job = await aiJobs.create({
+      organizationId: orgId as never,
+      clientId: clientId as never,
+      requestedBy: auth.userId as never,
+      task: 'case_history',
+      documents: [],
+      instructions: input.instructions,
+      status: 'queued',
+      attempts: 0,
+      maxAttempts: this.env.AI_JOB_MAX_ATTEMPTS,
+      runNumber: 1,
+      cancelRequested: false,
+    });
+    await this.enqueueOrFail(job);
+    await this.audit.record({
+      organizationId: orgId,
+      actorId: auth.userId,
+      action: 'ai.job_created',
+      targetType: 'ai_job',
+      targetId: String(job._id),
+      req,
+      meta: { task: 'case_history', clientId },
+    });
+    return jobDto(job);
+  }
+
   /** If the queue is down the job is failed immediately rather than left "queued" forever. */
   private async enqueueOrFail(job: AiJobDoc) {
     try {
@@ -195,6 +248,12 @@ export class AiService {
   private async loadJob(auth: AuthContext, id: string, req: Req) {
     const job = await aiJobs.findById(auth.organizationId, id);
     if (!job) throw new ApiError(404, 'NOT_FOUND', 'AI job not found');
+    if (!job.matterId) {
+      // Client-level: built from everything the requester could see, so only they may touch it.
+      if (String(job.requestedBy) !== auth.userId)
+        throw new ApiError(404, 'NOT_FOUND', 'AI job not found');
+      return job;
+    }
     await this.access.loadFor(auth, String(job.matterId), req, 'AI job not found');
     return job;
   }
@@ -202,7 +261,11 @@ export class AiService {
   async list(auth: AuthContext, q: z.infer<typeof aiJobListQuerySchema>, req: Req) {
     if (q.matterId) await this.access.load(auth, q.matterId, req);
     const hiddenMatterIds = q.matterId ? [] : await this.access.hiddenMatterIds(auth);
-    const page = await aiJobs.listPage(auth.organizationId, { ...q, hiddenMatterIds });
+    const page = await aiJobs.listPage(auth.organizationId, {
+      ...q,
+      hiddenMatterIds,
+      viewerId: auth.userId,
+    });
     return { data: page.data.map(jobDto), page: page.page };
   }
 
@@ -295,6 +358,11 @@ export class AiService {
   private async loadOutput(auth: AuthContext, id: string, req: Req) {
     const out = await aiOutputs.findById(auth.organizationId, id);
     if (!out) throw new ApiError(404, 'NOT_FOUND', 'AI output not found');
+    if (!out.matterId) {
+      if (String(out.requestedBy) !== auth.userId)
+        throw new ApiError(404, 'NOT_FOUND', 'AI output not found');
+      return out;
+    }
     await this.access.loadFor(auth, String(out.matterId), req, 'AI output not found');
     return out;
   }
@@ -302,7 +370,11 @@ export class AiService {
   async listOutputs(auth: AuthContext, q: z.infer<typeof aiOutputListQuerySchema>, req: Req) {
     if (q.matterId) await this.access.load(auth, q.matterId, req);
     const hiddenMatterIds = q.matterId ? [] : await this.access.hiddenMatterIds(auth);
-    const page = await aiOutputs.listPage(auth.organizationId, { ...q, hiddenMatterIds });
+    const page = await aiOutputs.listPage(auth.organizationId, {
+      ...q,
+      hiddenMatterIds,
+      viewerId: auth.userId,
+    });
     return { data: page.data.map(outputDto), page: page.page };
   }
 

@@ -20,6 +20,26 @@ const schema = z
     WORKER_ID: z.string().min(1).max(64).optional(),
     SCAN_CONCURRENCY: z.coerce.number().int().min(1).default(4),
     AI_CONCURRENCY: z.coerce.number().int().min(1).default(2),
+    /** Text extraction (and OCR for scans). OCR is CPU-heavy: keep this at 1 per worker unless it has spare cores. */
+    EXTRACT_CONCURRENCY: z.coerce.number().int().min(1).default(1),
+    /** Read scanned pages and images with the built-in Tesseract. Nothing leaves the server. */
+    OCR_ENABLED: bool.default('true'),
+    /** Bundled languages: eng, hin. Join with "+" (e.g. eng+hin). */
+    OCR_LANGUAGES: z
+      .string()
+      .default('eng')
+      .transform((v) =>
+        v
+          .split('+')
+          .map((l) => l.trim())
+          .filter(Boolean),
+      )
+      .refine(
+        (l) => l.length > 0 && l.every((x) => ['eng', 'hin'].includes(x)),
+        'Use eng and/or hin',
+      ),
+    /** Most pages OCR'd per document; the rest are skipped and the result is marked partial. */
+    OCR_MAX_PAGES: z.coerce.number().int().min(1).max(500).default(40),
 
     // --- Storage (same settings as the API: the worker reads uploaded files) ---
     STORAGE_DRIVER: z.enum(['local', 's3']).default('local'),

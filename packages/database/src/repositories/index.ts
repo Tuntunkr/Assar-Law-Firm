@@ -61,6 +61,16 @@ export const sessions = {
   deleteByTokenHash: (tokenHash: string) => SessionModel.deleteOne({ tokenHash }),
   touch: (id: Id, lastSeenAt: Date, idleExpiresAt: Date) =>
     SessionModel.updateOne({ _id: id }, { lastSeenAt, idleExpiresAt }),
+  /** Active staff sessions of one user, newest activity first. */
+  listForUser: (userId: Id) =>
+    SessionModel.find({
+      userId,
+      principal: { $ne: 'client' },
+      absoluteExpiresAt: { $gt: new Date() },
+    })
+      .sort({ lastSeenAt: -1 })
+      .lean(),
+  deleteOneForUser: (userId: Id, id: Id) => SessionModel.deleteOne({ _id: id, userId }),
   deleteAllForUser: (userId: Id) => SessionModel.deleteMany({ userId }),
   deleteOthersForUser: (userId: Id, keepTokenHash: string) =>
     SessionModel.deleteMany({ userId, tokenHash: { $ne: keepTokenHash } }),
@@ -142,3 +152,7 @@ export * from './crm.js';
 export * from './work.js';
 export * from './ai.js';
 export * from './portal.js';
+export * from './billing.js';
+export * from './timeline.js';
+export * from './templates.js';
+export * from './reminders.js';

@@ -13,6 +13,15 @@ export interface OrganizationDoc {
   _id: Id;
   name: string;
   slug: string;
+  billing?: {
+    currency: string;
+    defaultHourlyRateCents: number | null;
+    /** Basis points: 825 = 8.25%. */
+    defaultTaxRateBp: number;
+    invoiceDueDays: number;
+    /** Days relative to the due date for payment reminders (negative = before). Default: -3, 1, 7, 14, 30. */
+    reminderDays?: number[];
+  };
   status: 'active' | 'suspended';
   createdAt: Date;
   updatedAt: Date;
@@ -30,6 +39,13 @@ export const OrganizationModel = define<OrganizationDoc>(
         match: /^[a-z0-9-]{3,50}$/,
       },
       status: { type: String, enum: ['active', 'suspended'], default: 'active' },
+      billing: {
+        currency: { type: String, default: 'USD' },
+        defaultHourlyRateCents: { type: Number, default: null, min: 0 },
+        defaultTaxRateBp: { type: Number, default: 0, min: 0, max: 10000 },
+        invoiceDueDays: { type: Number, default: 30, min: 0, max: 365 },
+        reminderDays: { type: [Number], default: undefined },
+      },
     },
     { timestamps: true },
   ),
@@ -94,6 +110,8 @@ export interface MembershipDoc {
   userId: Id;
   role: Role;
   status: 'active' | 'disabled';
+  /** Default billing rate for this person; overrides the organization default. */
+  hourlyRateCents?: number | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -106,6 +124,7 @@ const membershipSchema = new Schema<MembershipDoc>(
       required: true,
       enum: ['owner', 'admin', 'attorney', 'paralegal', 'billing', 'staff'],
     },
+    hourlyRateCents: { type: Number, default: null, min: 0 },
     status: { type: String, enum: ['active', 'disabled'], default: 'active' },
   },
   { timestamps: true },
@@ -324,6 +343,16 @@ export interface MatterDoc {
   titleLower: string;
   practiceArea: string;
   description?: string;
+  /** Court details for litigation matters. */
+  court?: {
+    name?: string;
+    caseNumber?: string;
+    judge?: string;
+    courtroom?: string;
+    jurisdiction?: string;
+    /** `YYYY-MM-DD` */
+    filedOn?: string;
+  } | null;
   status: 'open' | 'pending' | 'closed' | 'archived';
   /** Restricted matters are visible only to users in matter_access (plus the owner, audited). */
   restricted: boolean;
@@ -348,6 +377,20 @@ const matterSchema = new Schema<MatterDoc>(
     titleLower: { type: String, required: true },
     practiceArea: { type: String, required: true },
     description: { type: String, maxlength: 5000 },
+    court: {
+      type: new Schema(
+        {
+          name: { type: String, maxlength: 200 },
+          caseNumber: { type: String, maxlength: 100 },
+          judge: { type: String, maxlength: 150 },
+          courtroom: { type: String, maxlength: 100 },
+          jurisdiction: { type: String, maxlength: 150 },
+          filedOn: { type: String, match: /^\d{4}-\d{2}-\d{2}$/ },
+        },
+        { _id: false },
+      ),
+      default: null,
+    },
     status: { type: String, enum: ['open', 'pending', 'closed', 'archived'], default: 'open' },
     restricted: { type: Boolean, default: false },
     portalVisible: { type: Boolean, default: false },
@@ -538,6 +581,116 @@ versionSchema.index({ organizationId: 1, documentId: 1, version: 1 }, { unique: 
 versionSchema.index({ organizationId: 1, status: 1, createdAt: 1 });
 export const DocumentVersionModel = define<DocumentVersionDoc>('DocumentVersion', versionSchema);
 
+/** Largest amount of extracted text kept per version (characters). Longer documents are cut and flagged. */
+export const MAX_STORED_TEXT_CHARS = 2_000_000;
+export const TEXT_STATUSES = ['pending', 'processing', 'done', 'failed'] as const;
+export type TextStatus = (typeof TEXT_STATUSES)[number];
+
+/**
+ * The text read from one document version (by parsing, or by OCR for scans). Kept apart from the version
+ * row so listing documents never loads it. It is as sensitive as the file itself: every read goes through
+ * the same matter-access checks, and it never appears in logs or audit entries.
+ */
+export interface DocumentTextDoc {
+  _id: Id;
+  organizationId: Id;
+  /** Denormalized so access filters need no join. */
+  matterId: Id;
+  documentId: Id;
+  versionId: Id;
+  version: number;
+  status: TextStatus;
+  method?: 'text' | 'ocr' | 'mixed' | null;
+  pages?: number | null;
+  ocrPages?: number | null;
+  /** Mean OCR confidence, 0–100. */
+  confidence?: number | null;
+  /** The text was cut at the page or size limit. */
+  truncated?: boolean;
+  chars?: number | null;
+  text?: string;
+  /** Stable code and a message that never contains document content. */
+  error?: { code: string; message: string } | null;
+  extractedAt?: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+const documentTextSchema = new Schema<DocumentTextDoc>(
+  {
+    organizationId: { type: Schema.Types.ObjectId, required: true },
+    matterId: { type: Schema.Types.ObjectId, required: true },
+    documentId: { type: Schema.Types.ObjectId, required: true },
+    versionId: { type: Schema.Types.ObjectId, required: true },
+    version: { type: Number, required: true },
+    status: { type: String, enum: TEXT_STATUSES, default: 'pending' },
+    method: { type: String, enum: ['text', 'ocr', 'mixed', null], default: null },
+    pages: { type: Number, default: null },
+    ocrPages: { type: Number, default: null },
+    confidence: { type: Number, default: null },
+    truncated: { type: Boolean, default: false },
+    chars: { type: Number, default: null },
+    text: { type: String, maxlength: MAX_STORED_TEXT_CHARS + 1000 },
+    error: {
+      type: new Schema({ code: String, message: String }, { _id: false }),
+      default: null,
+    },
+    extractedAt: { type: Date, default: null },
+  },
+  { timestamps: true },
+);
+documentTextSchema.index({ organizationId: 1, versionId: 1 }, { unique: true });
+documentTextSchema.index({ organizationId: 1, documentId: 1, version: -1 });
+documentTextSchema.index({ organizationId: 1, status: 1, updatedAt: 1 });
+// Full-text search is always scoped by organizationId (an equality prefix on the compound index).
+// `none` turns off stemming and stop words, so Hindi and other languages are tokenised the same way.
+documentTextSchema.index({ organizationId: 1, text: 'text' }, { default_language: 'none' });
+export const DocumentTextModel = define<DocumentTextDoc>('DocumentText', documentTextSchema);
+
+/** A reusable document with `{{placeholders}}`: notices, contracts, engagement letters and so on. */
+export interface DraftTemplateDoc {
+  _id: Id;
+  organizationId: Id;
+  name: string;
+  nameLower: string;
+  category: string;
+  description?: string | null;
+  body: string;
+  /** Derived from `body` on every save; never trusted from a client. */
+  placeholders: string[];
+  status: 'active' | 'archived';
+  /** Set for templates that shipped with the product, so seeding is idempotent. */
+  starterKey?: string | null;
+  revision: number;
+  createdBy: Id;
+  updatedBy: Id;
+  createdAt: Date;
+  updatedAt: Date;
+}
+const draftTemplateSchema = new Schema<DraftTemplateDoc>(
+  {
+    organizationId: { type: Schema.Types.ObjectId, required: true },
+    name: { type: String, required: true, trim: true, maxlength: 150 },
+    nameLower: { type: String, required: true },
+    category: { type: String, required: true },
+    description: { type: String, maxlength: 500, default: null },
+    body: { type: String, required: true, maxlength: 50_000 },
+    placeholders: { type: [String], default: [] },
+    status: { type: String, enum: ['active', 'archived'], default: 'active' },
+    starterKey: { type: String, default: null },
+    revision: { type: Number, default: 1 },
+    createdBy: { type: Schema.Types.ObjectId, required: true },
+    updatedBy: { type: Schema.Types.ObjectId, required: true },
+  },
+  { timestamps: true },
+);
+draftTemplateSchema.index({ organizationId: 1, nameLower: 1 }, { unique: true });
+draftTemplateSchema.index(
+  { organizationId: 1, starterKey: 1 },
+  { unique: true, partialFilterExpression: { starterKey: { $type: 'string' } } },
+);
+draftTemplateSchema.index({ organizationId: 1, status: 1, category: 1 });
+export const DraftTemplateModel = define<DraftTemplateDoc>('DraftTemplate', draftTemplateSchema);
+
 export const EVENT_KINDS = ['hearing', 'deadline', 'meeting', 'reminder', 'other'] as const;
 export interface CalendarEventDoc {
   _id: Id;
@@ -633,7 +786,10 @@ export const AI_STAGES = ['extracting_text', 'generating', 'saving'] as const;
 export interface AiJobDoc {
   _id: Id;
   organizationId: Id;
-  matterId: Id;
+  /** Matter-scoped jobs. Exactly one of `matterId` / `clientId` is set. */
+  matterId?: Id | null;
+  /** Client-level jobs (`case_history`): private to `requestedBy`. */
+  clientId?: Id | null;
   requestedBy: Id;
   task: string;
   /** Pinned source versions. */
@@ -661,7 +817,8 @@ export interface AiJobDoc {
 const aiJobSchema = new Schema<AiJobDoc>(
   {
     organizationId: { type: Schema.Types.ObjectId, required: true },
-    matterId: { type: Schema.Types.ObjectId, required: true },
+    matterId: { type: Schema.Types.ObjectId, default: null },
+    clientId: { type: Schema.Types.ObjectId, default: null },
     requestedBy: { type: Schema.Types.ObjectId, required: true },
     task: { type: String, required: true },
     documents: {
@@ -690,6 +847,10 @@ const aiJobSchema = new Schema<AiJobDoc>(
   },
   { timestamps: true },
 );
+aiJobSchema.pre('validate', function () {
+  if (!this.matterId === !this.clientId)
+    this.invalidate('matterId', 'A job belongs to exactly one matter or one client');
+});
 aiJobSchema.index({ organizationId: 1, _id: -1 });
 aiJobSchema.index({ organizationId: 1, status: 1, _id: -1 });
 aiJobSchema.index({ organizationId: 1, matterId: 1, _id: -1 });
@@ -697,7 +858,8 @@ export const AiJobModel = define<AiJobDoc>('AiJob', aiJobSchema);
 
 export interface AiSourceRef {
   sourceId: string;
-  documentId: Id;
+  /** Absent for generated sources such as the client's case-file index. */
+  documentId?: Id | null;
   version: number;
   filename: string;
   title: string;
@@ -707,7 +869,8 @@ export interface AiSourceRef {
 export interface AiOutputDoc {
   _id: Id;
   organizationId: Id;
-  matterId: Id;
+  matterId?: Id | null;
+  clientId?: Id | null;
   jobId: Id;
   task: string;
   requestedBy: Id;
@@ -732,7 +895,8 @@ export interface AiOutputDoc {
 const aiOutputSchema = new Schema<AiOutputDoc>(
   {
     organizationId: { type: Schema.Types.ObjectId, required: true },
-    matterId: { type: Schema.Types.ObjectId, required: true },
+    matterId: { type: Schema.Types.ObjectId, default: null },
+    clientId: { type: Schema.Types.ObjectId, default: null },
     jobId: { type: Schema.Types.ObjectId, required: true },
     task: { type: String, required: true },
     requestedBy: { type: Schema.Types.ObjectId, required: true },
@@ -752,7 +916,12 @@ const aiOutputSchema = new Schema<AiOutputDoc>(
   },
   { timestamps: { createdAt: true, updatedAt: false } },
 );
+aiOutputSchema.pre('validate', function () {
+  if (!this.matterId === !this.clientId)
+    this.invalidate('matterId', 'An output belongs to exactly one matter or one client');
+});
 aiOutputSchema.index({ organizationId: 1, jobId: 1 }, { unique: true });
+aiOutputSchema.index({ organizationId: 1, clientId: 1, _id: -1 });
 aiOutputSchema.index({ organizationId: 1, matterId: 1, _id: -1 });
 aiOutputSchema.index({ organizationId: 1, reviewStatus: 1, _id: -1 });
 export const AiOutputModel = define<AiOutputDoc>('AiOutput', aiOutputSchema);
@@ -894,3 +1063,181 @@ notificationSchema.index(
   { unique: true, partialFilterExpression: { dedupeKey: { $type: 'string' } } },
 );
 export const NotificationModel = define<NotificationDoc>('Notification', notificationSchema);
+
+// ---- Billing ----
+export interface TimeEntryDoc {
+  _id: Id;
+  organizationId: Id;
+  matterId: Id;
+  /** Denormalized from the matter (which cannot change client) so reports don't need a join. */
+  clientId: Id;
+  /** Who did the work. */
+  userId: Id;
+  /** The day the work was done (UTC midnight). */
+  workDate: Date;
+  minutes: number;
+  /** Free text. Treat as confidential: never logged, never put in audit metadata. */
+  description: string;
+  billable: boolean;
+  /** Rate in effect when the entry was logged; later rate changes never rewrite history. */
+  rateCents: number;
+  currency: string;
+  /** minutes x rate, rounded half up in integers; 0 when not billable. */
+  amountCents: number;
+  status: 'unbilled' | 'invoiced';
+  invoiceId?: Id | null;
+  createdBy: Id;
+  createdAt: Date;
+  updatedAt: Date;
+}
+const timeEntrySchema = new Schema<TimeEntryDoc>(
+  {
+    organizationId: { type: Schema.Types.ObjectId, required: true },
+    matterId: { type: Schema.Types.ObjectId, required: true },
+    clientId: { type: Schema.Types.ObjectId, required: true },
+    userId: { type: Schema.Types.ObjectId, required: true },
+    workDate: { type: Date, required: true },
+    minutes: { type: Number, required: true, min: 1, max: 1440 },
+    description: { type: String, required: true, maxlength: 1000 },
+    billable: { type: Boolean, default: true },
+    rateCents: { type: Number, required: true, min: 0 },
+    currency: { type: String, required: true },
+    amountCents: { type: Number, required: true, min: 0 },
+    status: { type: String, enum: ['unbilled', 'invoiced'], default: 'unbilled' },
+    invoiceId: { type: Schema.Types.ObjectId, default: null },
+    createdBy: { type: Schema.Types.ObjectId, required: true },
+  },
+  { timestamps: true },
+);
+timeEntrySchema.index({ organizationId: 1, workDate: -1, _id: -1 });
+timeEntrySchema.index({ organizationId: 1, matterId: 1, status: 1 });
+timeEntrySchema.index({ organizationId: 1, userId: 1, workDate: -1 });
+timeEntrySchema.index({ organizationId: 1, invoiceId: 1 });
+export const TimeEntryModel = define<TimeEntryDoc>('TimeEntry', timeEntrySchema);
+
+export interface InvoiceLine {
+  _id: Id;
+  type: 'time' | 'expense' | 'adjustment';
+  description: string;
+  matterId?: Id | null;
+  timeEntryId?: Id | null;
+  minutes?: number | null;
+  rateCents?: number | null;
+  /** Negative only for adjustments (discounts). */
+  amountCents: number;
+}
+export interface InvoicePayment {
+  _id: Id;
+  amountCents: number;
+  paidAt: Date;
+  method: string;
+  reference?: string;
+  recordedBy: Id;
+}
+export interface InvoiceDoc {
+  _id: Id;
+  organizationId: Id;
+  /** Assigned when the invoice is issued, so drafts leave no gaps in the sequence. */
+  number?: string | null;
+  clientId: Id;
+  status: 'draft' | 'issued' | 'paid' | 'void';
+  currency: string;
+  lines: InvoiceLine[];
+  /** Distinct matters on the lines, used to hide invoices that touch matters a viewer cannot see. */
+  matterIds: Id[];
+  subtotalCents: number;
+  taxRateBp: number;
+  taxCents: number;
+  totalCents: number;
+  amountPaidCents: number;
+  balanceCents: number;
+  payments: InvoicePayment[];
+  dueDays: number;
+  notes?: string;
+  issuedAt?: Date | null;
+  dueAt?: Date | null;
+  paidAt?: Date | null;
+  voidedAt?: Date | null;
+  voidReason?: string | null;
+  /** A log of times someone contacted the client about payment (newest last, at most 50). */
+  reminders?: {
+    _id: Id;
+    at: Date;
+    channel: string;
+    note?: string | null;
+    by: Id;
+  }[];
+  createdBy: Id;
+  createdAt: Date;
+  updatedAt: Date;
+}
+const invoiceSchema = new Schema<InvoiceDoc>(
+  {
+    organizationId: { type: Schema.Types.ObjectId, required: true },
+    number: { type: String, default: null },
+    clientId: { type: Schema.Types.ObjectId, required: true },
+    status: { type: String, enum: ['draft', 'issued', 'paid', 'void'], default: 'draft' },
+    currency: { type: String, required: true },
+    lines: {
+      type: [
+        new Schema({
+          type: { type: String, enum: ['time', 'expense', 'adjustment'], required: true },
+          description: { type: String, required: true, maxlength: 1000 },
+          matterId: { type: Schema.Types.ObjectId, default: null },
+          timeEntryId: { type: Schema.Types.ObjectId, default: null },
+          minutes: { type: Number, default: null },
+          rateCents: { type: Number, default: null },
+          amountCents: { type: Number, required: true },
+        }),
+      ],
+      default: [],
+    },
+    matterIds: { type: [Schema.Types.ObjectId], default: [] },
+    subtotalCents: { type: Number, default: 0 },
+    taxRateBp: { type: Number, default: 0, min: 0, max: 10000 },
+    taxCents: { type: Number, default: 0 },
+    totalCents: { type: Number, default: 0 },
+    amountPaidCents: { type: Number, default: 0 },
+    balanceCents: { type: Number, default: 0 },
+    payments: {
+      type: [
+        new Schema({
+          amountCents: { type: Number, required: true, min: 1 },
+          paidAt: { type: Date, required: true },
+          method: { type: String, required: true },
+          reference: { type: String, maxlength: 200 },
+          recordedBy: { type: Schema.Types.ObjectId, required: true },
+        }),
+      ],
+      default: [],
+    },
+    dueDays: { type: Number, default: 30 },
+    notes: { type: String, maxlength: 2000 },
+    issuedAt: { type: Date, default: null },
+    dueAt: { type: Date, default: null },
+    paidAt: { type: Date, default: null },
+    voidedAt: { type: Date, default: null },
+    voidReason: { type: String, maxlength: 500, default: null },
+    reminders: {
+      type: [
+        new Schema({
+          at: { type: Date, required: true },
+          channel: { type: String, required: true },
+          note: { type: String, maxlength: 500, default: null },
+          by: { type: Schema.Types.ObjectId, required: true },
+        }),
+      ],
+      default: [],
+    },
+    createdBy: { type: Schema.Types.ObjectId, required: true },
+  },
+  { timestamps: true },
+);
+invoiceSchema.index(
+  { organizationId: 1, number: 1 },
+  { unique: true, partialFilterExpression: { number: { $type: 'string' } } },
+);
+invoiceSchema.index({ organizationId: 1, _id: -1 });
+invoiceSchema.index({ organizationId: 1, status: 1, dueAt: 1 });
+invoiceSchema.index({ organizationId: 1, clientId: 1, _id: -1 });
+export const InvoiceModel = define<InvoiceDoc>('Invoice', invoiceSchema);

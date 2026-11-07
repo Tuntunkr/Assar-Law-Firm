@@ -8,6 +8,7 @@ export const PERMISSIONS_KEY = 'permissions';
 export const IDEMPOTENT_KEY = 'idempotent';
 export const CLIENT_PORTAL = 'clientPortal';
 export const SERVICE_SCOPE = 'serviceScope';
+export const RATE_LIMIT_KEY = 'rateLimit';
 
 /** Route needs no session. */
 export const Public = () => SetMetadata(IS_PUBLIC, true);
@@ -31,11 +32,20 @@ export const ServiceAccess = (scope: ServiceScope) => SetMetadata(SERVICE_SCOPE,
 
 export const Client = createParamDecorator((_: unknown, ctx: ExecutionContext) => {
   const req = ctx.switchToHttp().getRequest<AppRequest>();
-  if (!req.client) throw new Error('Client() used outside a portal route');
-  return req.client;
+  if (!req.portalUser) throw new Error('Client() used outside a portal route');
+  return req.portalUser;
 });
 export const Service = createParamDecorator((_: unknown, ctx: ExecutionContext) => {
   const req = ctx.switchToHttp().getRequest<AppRequest>();
   if (!req.service) throw new Error('Service() used outside an automation route');
   return req.service;
 });
+
+export interface RateLimitOptions {
+  /** Counter name; routes sharing a name share a budget. */
+  name: string;
+  limit: number;
+  windowSeconds: number;
+}
+/** A tighter per-caller limit for an expensive route, on top of the baseline per-caller limit. */
+export const RateLimit = (opts: RateLimitOptions) => SetMetadata(RATE_LIMIT_KEY, opts);

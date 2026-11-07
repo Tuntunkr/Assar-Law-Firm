@@ -4,6 +4,7 @@ import {
   aiOutputs,
   audit,
   documents,
+  documentTexts,
   documentVersions,
   userCanAccessMatter,
   type AiJobDoc,
@@ -11,6 +12,7 @@ import {
 import type { StorageService } from '@assar/storage';
 import type { AiTask } from '@assar/types';
 import { describeError, JobFailure } from './errors.js';
+import { buildCaseFile } from './case-file.js';
 import { extractText, readCapped } from './extract.js';
 import type { GrokClient } from './grok.js';
 import type { AiJobData, EventSink, JobLogger } from './names.js';
@@ -85,10 +87,15 @@ export function createAiProcessor(deps: AiProcessorDeps) {
           false,
         );
 
-      const text = await extractText(
-        await readCapped(await deps.storage.read(v.storageKey), deps.maxExtractBytes),
-        v.contentType,
-      );
+      // Prefer the text already read at upload time (it includes OCR for scans); otherwise read it now.
+      const stored = await documentTexts.find(org, v._id);
+      const text =
+        stored?.status === 'done' && stored.text
+          ? stored.text
+          : await extractText(
+              await readCapped(await deps.storage.read(v.storageKey), deps.maxExtractBytes),
+              v.contentType,
+            );
       const truncated = text.length > budget;
       sources.push({
         id: `S${i + 1}`,
@@ -108,7 +115,7 @@ export function createAiProcessor(deps: AiProcessorDeps) {
     const id = String(rec._id);
 
     // Access may have changed while the job waited in the queue.
-    if (!(await userCanAccessMatter(org, rec.matterId, rec.requestedBy))) {
+    if (rec.matterId && !(await userCanAccessMatter(org, rec.matterId, rec.requestedBy))) {
       throw new JobFailure(
         'The requester no longer has access to this matter',
         'ACCESS_REVOKED',
@@ -117,7 +124,29 @@ export function createAiProcessor(deps: AiProcessorDeps) {
     }
     const wasCancelled = async () => (await aiJobs.findById(org, id))?.cancelRequested === true;
 
-    const sources = await loadSources(rec);
+    let sources: Source[];
+    if (rec.clientId) {
+      // Client-level: the only source is the generated case file, limited to what the requester may see.
+      const file = await buildCaseFile(
+        org,
+        String(rec.clientId),
+        String(rec.requestedBy),
+        deps.maxContextChars,
+      );
+      sources = [
+        {
+          id: 'S1',
+          documentId: null,
+          version: 1,
+          title: 'Client case file',
+          filename: 'case-file.txt',
+          text: file.text,
+          truncated: file.truncated,
+        },
+      ];
+    } else {
+      sources = await loadSources(rec);
+    }
     if (await wasCancelled()) return false;
 
     await stage(org, id, 'generating');
@@ -132,14 +161,15 @@ export function createAiProcessor(deps: AiProcessorDeps) {
     try {
       output = await aiOutputs.create({
         organizationId: rec.organizationId,
-        matterId: rec.matterId,
+        matterId: rec.matterId ?? null,
+        clientId: rec.clientId ?? null,
         jobId: rec._id,
         task: rec.task,
         requestedBy: rec.requestedBy,
         result: result as unknown as Record<string, unknown>,
         sources: sources.map((s) => ({
           sourceId: s.id,
-          documentId: s.documentId as never,
+          documentId: (s.documentId ?? null) as never,
           version: s.version,
           filename: s.filename,
           title: s.title,
@@ -183,21 +213,23 @@ export function createAiProcessor(deps: AiProcessorDeps) {
         sources: sources.length,
       },
     } as never);
-    await deps.events
-      ?.publish({
-        event: 'ai.output_ready',
-        organizationId: org,
-        data: {
-          outputId: String(output._id),
-          jobId: id,
-          matterId: String(rec.matterId),
-          requestedBy: String(rec.requestedBy),
-          task: rec.task,
-        },
-      })
-      .catch((e: Error) =>
-        deps.logger.warn({ error: e.message }, 'could not publish ai.output_ready'),
-      );
+    // Client-level summaries are private to the requester; workflows only hear about matter-scoped output.
+    if (rec.matterId)
+      await deps.events
+        ?.publish({
+          event: 'ai.output_ready',
+          organizationId: org,
+          data: {
+            outputId: String(output._id),
+            jobId: id,
+            matterId: String(rec.matterId),
+            requestedBy: String(rec.requestedBy),
+            task: rec.task,
+          },
+        })
+        .catch((e: Error) =>
+          deps.logger.warn({ error: e.message }, 'could not publish ai.output_ready'),
+        );
     return true;
   }
 

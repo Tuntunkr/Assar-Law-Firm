@@ -92,6 +92,14 @@ export const matters = {
       await MatterModel.create([{ ...data, titleLower: data.title.toLowerCase() }], tx)
     )[0]!.toObject(),
   findById: (organizationId: Id, id: Id) => MatterModel.findOne({ _id: id, organizationId }).lean(),
+  /** Ids of every matter belonging to a client (any status). */
+  idsForClient: async (organizationId: Id, clientId: Id) =>
+    (await MatterModel.find({ organizationId, clientId }).select('_id').lean()).map((m) => m._id),
+  /** Just enough to label a list of items with their matter. */
+  summaries: (organizationId: Id, ids: Id[]) =>
+    MatterModel.find({ organizationId, _id: { $in: ids } })
+      .select('matterNumber title clientId')
+      .lean(),
   update: (organizationId: Id, id: Id, patch: Record<string, unknown>, tx: Tx = {}) =>
     MatterModel.findOneAndUpdate(
       { _id: id, organizationId },

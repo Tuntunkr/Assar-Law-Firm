@@ -20,11 +20,31 @@ function cursor(c?: string) {
   return d ? { _id: { $lt: d } } : {};
 }
 
+/**
+ * Which rows a viewer may list. Matter-scoped rows must not be on a hidden matter. Client-level rows
+ * (no matter) were built from everything the requester could see, so only the requester may list them.
+ */
+function scopeFilter(o: {
+  matterId?: string;
+  clientId?: string;
+  hiddenMatterIds: Id[];
+  viewerId: Id;
+}): Record<string, unknown> {
+  if (o.matterId) return { matterId: o.matterId };
+  if (o.clientId) return { clientId: o.clientId, requestedBy: o.viewerId };
+  return {
+    $or: [
+      { matterId: { $nin: [...o.hiddenMatterIds, null] } },
+      { matterId: null, requestedBy: o.viewerId },
+    ],
+  };
+}
+
 // Every function takes organizationId first and applies it to the query.
 
 export const aiJobs = {
   create: async (
-    data: Pick<AiJobDoc, 'organizationId' | 'matterId' | 'requestedBy' | 'task' | 'documents'> &
+    data: Pick<AiJobDoc, 'organizationId' | 'requestedBy' | 'task' | 'documents'> &
       Partial<AiJobDoc>,
   ) => (await AiJobModel.create(data)).toObject(),
   findById: (organizationId: Id, id: Id) => AiJobModel.findOne({ _id: id, organizationId }).lean(),
@@ -50,11 +70,14 @@ export const aiJobs = {
       status?: string;
       task?: string;
       hiddenMatterIds: Id[];
+      /** Client-level jobs are listed only to the person who requested them. */
+      viewerId: Id;
+      clientId?: string;
     },
   ) {
     const filter: Record<string, unknown> = {
       organizationId,
-      matterId: o.matterId ? o.matterId : { $nin: o.hiddenMatterIds },
+      ...scopeFilter(o),
       ...(o.status ? { status: o.status } : {}),
       ...(o.task ? { task: o.task } : {}),
       ...cursor(o.cursor),
@@ -83,11 +106,13 @@ export const aiOutputs = {
       reviewStatus?: string;
       task?: string;
       hiddenMatterIds: Id[];
+      viewerId: Id;
+      clientId?: string;
     },
   ) {
     const filter: Record<string, unknown> = {
       organizationId,
-      matterId: o.matterId ? o.matterId : { $nin: o.hiddenMatterIds },
+      ...scopeFilter(o),
       ...(o.reviewStatus ? { reviewStatus: o.reviewStatus } : {}),
       ...(o.task ? { task: o.task } : {}),
       ...cursor(o.cursor),

@@ -19,8 +19,9 @@ import {
 import { ApiError } from '../common/exception.filter';
 import { ENV, type Env } from '../config/env';
 import { ServiceAuthService } from '../automation/service-auth.service';
-import { ClientSessionService, PORTAL_SESSION_COOKIE } from '../portal/client-session.service';
-import { SESSION_COOKIE, SessionService } from './session.service';
+import { ClientSessionService } from '../portal/client-session.service';
+import { cookieNames } from '../security/cookies';
+import { SessionService } from './session.service';
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
@@ -40,7 +41,11 @@ export class AuthGuard implements CanActivate {
     private readonly clientSessions: ClientSessionService,
     private readonly serviceAuth: ServiceAuthService,
     @Inject(ENV) private readonly env: Env,
-  ) {}
+  ) {
+    this.names = cookieNames(this.env.cookieSecure);
+  }
+
+  private readonly names: ReturnType<typeof cookieNames>;
 
   async canActivate(ctx: ExecutionContext): Promise<boolean> {
     const req = ctx.switchToHttp().getRequest<AppRequest>();
@@ -72,10 +77,10 @@ export class AuthGuard implements CanActivate {
     const cookies = (req.cookies ?? {}) as Record<string, string | undefined>;
 
     if (this.reflector.getAllAndOverride<boolean>(CLIENT_PORTAL, targets)) {
-      const raw = cookies[PORTAL_SESSION_COOKIE];
+      const raw = cookies[this.names.portalSession];
       const client = raw ? await this.clientSessions.validate(raw) : null;
       if (!client) throw new ApiError(401, 'UNAUTHENTICATED', 'Authentication required');
-      req.client = client;
+      req.portalUser = client;
       if (unsafe) {
         const header = req.header('x-csrf-token');
         if (!header || !safeEqual(header, client.csrfToken))
@@ -84,7 +89,7 @@ export class AuthGuard implements CanActivate {
       return true;
     }
 
-    const raw = cookies[SESSION_COOKIE];
+    const raw = cookies[this.names.session];
     const auth = raw ? await this.sessions.validate(raw) : null;
     if (!auth) throw new ApiError(401, 'UNAUTHENTICATED', 'Authentication required');
     req.auth = auth;

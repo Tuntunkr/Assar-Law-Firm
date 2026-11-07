@@ -3,7 +3,8 @@ import type { AiTask } from '@assar/types';
 /** A document (version) supplied to the model. `text` is what was actually sent, so quotes can be verified against it. */
 export interface Source {
   id: string; // S1, S2, ...
-  documentId: string;
+  /** Absent for generated sources such as a client's case-file index. */
+  documentId: string | null;
   version: number;
   title: string;
   filename: string;
@@ -21,6 +22,7 @@ export const TASKS_REQUIRING_CITATIONS: readonly AiTask[] = [
   'extraction',
   'chronology',
   'clause_review',
+  'case_history',
 ];
 
 const TASK_INSTRUCTIONS: Record<AiTask, string> = {
@@ -36,6 +38,8 @@ const TASK_INSTRUCTIONS: Record<AiTask, string> = {
     'Identify notable contract clauses (label = clause type, e.g. "Termination"). For each, "text" explains the concern or point for a lawyer to check, "risk" is low/medium/high/unclear, and the citation quotes the clause itself. Do not assert that a clause is enforceable or unlawful.',
   drafting:
     'Prepare a first draft following the lawyer\'s brief in "body". Use [PLACEHOLDER: description] for any fact not found in the sources. List the source facts you relied on in "items" (label "Source fact") with citations, and list assumptions in "assumptions". Do not invent names, dates, amounts or legal authority.',
+  case_history:
+    'Summarise this client\'s case history from the CASE FILE source: "body" is a short overview of the relationship and where each matter stands. Put each matter in "items" (label = the matter number), with "text" giving its status, court details if any, and the most important recent events, and a citation quoting the matter line. Also add items (label "Open item") for tasks still outstanding or upcoming steps that the history itself shows. Report dates exactly as they appear in the case file; never compute deadlines or predict outcomes.',
   missing_info:
     'List information that appears to be missing or unclear and that a lawyer would need (label "Missing"). "text" says what is missing and why it matters. Cite where the gap is evident when possible.',
 };

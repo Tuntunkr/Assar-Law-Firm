@@ -1,6 +1,17 @@
-export const QUEUE_NAMES = { scan: 'assar-scan', ai: 'assar-ai', events: 'assar-events' } as const;
+export const QUEUE_NAMES = {
+  scan: 'assar-scan',
+  extract: 'assar-extract',
+  billing: 'assar-billing',
+  ai: 'assar-ai',
+  events: 'assar-events',
+} as const;
 
 export interface ScanJobData {
+  organizationId: string;
+  versionId: string;
+}
+/** Reads the text out of one scanned-clean document version (parsing, or OCR for scans). */
+export interface ExtractJobData {
   organizationId: string;
   versionId: string;
 }

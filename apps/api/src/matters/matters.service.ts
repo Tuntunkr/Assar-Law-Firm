@@ -30,6 +30,20 @@ type PartyRow = Awaited<ReturnType<typeof parties.create>>;
 
 const idStr = (v: unknown) => (v == null ? null : String(v));
 
+/** Only fields that are set; an all-empty court is reported as null. */
+const courtDto = (c: MatterDoc['court']) => {
+  if (!c) return null;
+  const out = {
+    name: c.name ?? null,
+    caseNumber: c.caseNumber ?? null,
+    judge: c.judge ?? null,
+    courtroom: c.courtroom ?? null,
+    jurisdiction: c.jurisdiction ?? null,
+    filedOn: c.filedOn ?? null,
+  };
+  return Object.values(out).some((v) => v !== null) ? out : null;
+};
+
 export const matterDto = (m: MatterDoc) => ({
   id: String(m._id),
   matterNumber: m.matterNumber,
@@ -37,6 +51,7 @@ export const matterDto = (m: MatterDoc) => ({
   title: m.title,
   practiceArea: m.practiceArea,
   description: m.description ?? null,
+  court: courtDto(m.court),
   status: m.status,
   restricted: m.restricted,
   portalVisible: !!m.portalVisible,
@@ -106,6 +121,7 @@ export class MattersService {
             title: input.title,
             practiceArea: input.practiceArea,
             description: input.description,
+            court: input.court ?? null,
             status: 'open',
             restricted: input.restricted,
             leadAttorneyId: (input.leadAttorneyId ?? null) as never,
