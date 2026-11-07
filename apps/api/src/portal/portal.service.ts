@@ -1,7 +1,13 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { aiOutputs, documents, portalQueries } from '@assar/database';
+import { InvoiceModel, aiOutputs, documents, outbox, portalQueries } from '@assar/database';
 import type { StorageService } from '@assar/storage';
-import type { PortalAiOutput, PortalDocument, PortalMatter } from '@assar/types';
+import type {
+  PortalAiOutput,
+  PortalDocument,
+  PortalInvoice,
+  PortalMatter,
+  PortalMessage,
+} from '@assar/types';
 import { AuditService } from '../audit/audit.service';
 import type { AppRequest, ClientContext } from '../common/auth-context';
 import { ApiError } from '../common/exception.filter';
@@ -139,6 +145,48 @@ export class PortalService {
   async aiOutputs(c: ClientContext, matterId: string) {
     const m = await this.matterFor(c, matterId);
     return { data: (await portalQueries.sharedAiOutputs(c.organizationId, m._id)).map(outputDto) };
+  }
+
+  async invoices(c: ClientContext, matterId: string): Promise<{ data: PortalInvoice[] }> {
+    const m = await this.matterFor(c, matterId);
+    const rows = await InvoiceModel.find({
+      organizationId: c.organizationId,
+      clientId: c.clientId,
+      matterIds: m._id,
+      status: { $in: ['issued', 'paid'] },
+    })
+      .select('number status currency totalCents balanceCents issuedAt dueAt')
+      .sort({ issuedAt: -1 })
+      .limit(50)
+      .lean();
+    return {
+      data: rows.map((row) => ({
+        id: String(row._id),
+        matterId: String(m._id),
+        number: row.number ?? null,
+        status: row.status as 'issued' | 'paid',
+        currency: row.currency,
+        totalCents: row.totalCents,
+        balanceCents: row.balanceCents,
+        issuedAt: row.issuedAt ? row.issuedAt.toISOString() : null,
+        dueAt: row.dueAt ? row.dueAt.toISOString() : null,
+      })),
+    };
+  }
+
+  async messages(c: ClientContext, matterId: string): Promise<{ data: PortalMessage[] }> {
+    const m = await this.matterFor(c, matterId);
+    const rows = await outbox.releasedForClient(c.organizationId, c.clientId, m._id);
+    return {
+      data: rows.map((row) => ({
+        id: String(row._id),
+        matterId: String(m._id),
+        channel: row.channel,
+        body: row.body,
+        status: row.status,
+        approvedAt: row.approvedAt ? row.approvedAt.toISOString() : null,
+      })),
+    };
   }
 
   async aiOutput(c: ClientContext, id: string) {

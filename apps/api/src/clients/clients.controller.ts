@@ -1,5 +1,10 @@
 import { Body, Controller, Get, Param, Patch, Post, Query, Req } from '@nestjs/common';
-import { clientListQuerySchema, createClientSchema, updateClientSchema } from '@assar/validation';
+import {
+  clientListQuerySchema,
+  createClientSchema,
+  updateClientSchema,
+  whatsappOptOutSchema,
+} from '@assar/validation';
 import type { z } from 'zod';
 import type { AppRequest, AuthContext } from '../common/auth-context';
 import { Auth, Idempotent, RequirePermissions } from '../common/decorators';
@@ -46,5 +51,16 @@ export class ClientsController {
     @Req() req: AppRequest,
   ) {
     return this.clients.update(auth, id, body, req);
+  }
+
+  @RequirePermissions('client:write')
+  @Post(':id/whatsapp-opt-out')
+  whatsAppOptOut(
+    @Auth() auth: AuthContext,
+    @Param('id', ObjectIdPipe) id: string,
+    @Body(new ZodPipe(whatsappOptOutSchema)) body: z.infer<typeof whatsappOptOutSchema>,
+    @Req() req: AppRequest,
+  ) {
+    return this.clients.setWhatsAppOptOut(auth, id, body, req);
   }
 }

@@ -131,6 +131,16 @@ export class PortalController {
     return this.portal.downloadLink(c, id, versionNo(v), req);
   }
 
+  @Get('matters/:id/invoices')
+  invoices(@Client() c: ClientContext, @Param('id', ObjectIdPipe) id: string) {
+    return this.portal.invoices(c, id);
+  }
+
+  @Get('matters/:id/messages')
+  messages(@Client() c: ClientContext, @Param('id', ObjectIdPipe) id: string) {
+    return this.portal.messages(c, id);
+  }
+
   @Get('matters/:id/ai-outputs')
   aiOutputs(@Client() c: ClientContext, @Param('id', ObjectIdPipe) id: string) {
     return this.portal.aiOutputs(c, id);

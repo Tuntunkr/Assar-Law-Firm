@@ -2,12 +2,14 @@ import {
   Body,
   Controller,
   Get,
+  Header,
   HttpCode,
   HttpStatus,
   Inject,
   Param,
   Patch,
   Post,
+  Query,
   Req,
 } from '@nestjs/common';
 import {
@@ -26,6 +28,7 @@ import { ObjectIdPipe } from '../common/object-id.pipe';
 import { ZodPipe } from '../common/zod.pipe';
 import { ENV, type Env } from '../config/env';
 import { PracticeService } from './practice.service';
+import { hubChallenge, whatsappConfig } from './whatsapp-cloud';
 
 @Controller()
 export class PracticeController {
@@ -131,6 +134,16 @@ export class PracticeController {
   }
 
   @RequirePermissions('message:approve')
+  @Post('outbox/:id/retry')
+  retryMessage(
+    @Auth() auth: AuthContext,
+    @Param('id', ObjectIdPipe) id: string,
+    @Req() req: AppRequest,
+  ) {
+    return this.practice.retryOutbox(auth, id, req);
+  }
+
+  @RequirePermissions('message:approve')
   @Post('outbox/:id/reject')
   rejectMessage(
     @Auth() auth: AuthContext,
@@ -175,5 +188,42 @@ export class PracticeController {
       meta: { replayed: result.replayed },
     });
     return result;
+  }
+
+  /** Meta's subscription handshake. A missing credential is a gate, not a fake success. */
+  @Public()
+  @Get('webhooks/whatsapp')
+  @Header('Content-Type', 'text/plain')
+  verifyWhatsApp(@Query() query: Record<string, unknown>) {
+    const cfg = whatsappConfig(this.env);
+    if (!cfg)
+      throw new ApiError(
+        503,
+        'SERVICE_UNAVAILABLE',
+        'External activation gate: WhatsApp credentials are not configured',
+      );
+    const challenge = hubChallenge(query, cfg.verifyToken);
+    if (!challenge) throw new ApiError(403, 'FORBIDDEN', 'Webhook verification was rejected');
+    return challenge;
+  }
+
+  /** Delivery, read, and failure callbacks. The signature is checked against the raw body. */
+  @Public()
+  @Post('webhooks/whatsapp')
+  @HttpCode(HttpStatus.OK)
+  async whatsAppStatus(@Req() req: AppRequest) {
+    const raw = req.rawBody;
+    if (!raw) throw new ApiError(400, 'VALIDATION_FAILED', 'A JSON body is required');
+    let body: unknown;
+    try {
+      body = JSON.parse(raw.toString('utf8'));
+    } catch {
+      throw new ApiError(400, 'VALIDATION_FAILED', 'A JSON body is required');
+    }
+    return this.practice.applyWhatsAppStatuses(
+      raw,
+      String(req.header('x-hub-signature-256') ?? ''),
+      body,
+    );
   }
 }

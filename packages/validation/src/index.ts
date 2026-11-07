@@ -330,18 +330,37 @@ export const updateDeadlineSchema = z
   .partial()
   .refine((v) => Object.keys(v).length > 0, 'Provide at least one field');
 
-export const outboxDraftSchema = z.object({
-  clientId: objectIdSchema,
-  matterId: objectIdSchema.optional(),
-  channel: z.enum(MESSAGE_CHANNELS),
-  templateLabel: z.string().trim().min(2).max(120),
-  body: z.string().trim().min(2).max(5000),
-  consent: z.object({
-    optedIn: z.literal(true),
-    namesFirm: z.literal(true),
-    note: z.string().trim().max(500).optional(),
-  }),
-});
+export const outboxDraftSchema = z
+  .object({
+    clientId: objectIdSchema,
+    matterId: objectIdSchema.optional(),
+    channel: z.enum(MESSAGE_CHANNELS),
+    templateLabel: z.string().trim().min(2).max(120),
+    /** Cloud API template name. Saving it does not mean the template is approved. */
+    templateName: z
+      .string()
+      .trim()
+      .regex(/^[a-z0-9_]{1,512}$/)
+      .optional(),
+    templateLanguage: z
+      .string()
+      .trim()
+      .regex(/^[a-z]{2,3}(_[A-Z]{2})?$/)
+      .optional(),
+    bodyParameters: z.array(z.string().trim().min(1).max(200)).max(10).optional(),
+    body: z.string().trim().min(2).max(5000),
+    consent: z.object({
+      optedIn: z.literal(true),
+      namesFirm: z.literal(true),
+      note: z.string().trim().max(500).optional(),
+    }),
+  })
+  .refine((v) => Boolean(v.templateName) === Boolean(v.templateLanguage), {
+    message: 'A WhatsApp template needs both a name and a language. Neither means it is approved.',
+    path: ['templateName'],
+  });
+
+export const whatsappOptOutSchema = z.object({ optedOut: z.boolean() });
 
 export const webhookAckSchema = z.object({
   eventId: z.string().trim().min(8).max(200),

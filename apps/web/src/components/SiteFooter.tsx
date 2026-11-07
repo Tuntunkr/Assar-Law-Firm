@@ -25,9 +25,15 @@ export function SiteFooter() {
           </div>
         ))}
       </Container>
-      <Container className="border-t border-navy-800 py-6 text-xs">
-        © {new Date().getFullYear()} {site.name}. AI output is an unverified draft and is not legal
-        advice.
+      <Container className="border-t border-navy-800 py-6 text-xs leading-5">
+        <p>
+          © {new Date().getFullYear()} {site.name}. AI output is an unverified draft and is not
+          legal advice.
+        </p>
+        <p className="mt-2 max-w-3xl text-navy-300">
+          Publishing this page as an advertisement needs review by an advocate. The page describes
+          the software. It does not offer a legal result.
+        </p>
       </Container>
     </footer>
   );

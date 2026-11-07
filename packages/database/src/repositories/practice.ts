@@ -76,6 +76,19 @@ export const outbox = {
       returnDocument: 'after',
       runValidators: true,
     }).lean(),
+  findByProviderMessageId: (providerMessageId: string) =>
+    OutboxModel.findOne({ providerMessageId }).lean(),
+  /** Messages the firm has released. Drafts, rejections, and failures stay off the portal. */
+  releasedForClient: (organizationId: Id, clientId: Id, matterId: Id) =>
+    OutboxModel.find({
+      organizationId,
+      clientId,
+      matterId,
+      status: { $in: ['mock_delivered', 'accepted', 'sent', 'delivered', 'read', 'played'] },
+    })
+      .sort({ _id: -1 })
+      .limit(50)
+      .lean(),
 };
 
 export const matterIds = {

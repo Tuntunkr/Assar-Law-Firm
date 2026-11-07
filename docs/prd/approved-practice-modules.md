@@ -88,5 +88,41 @@ Production deploy, production data, real WhatsApp or email, court filing, paymen
 5. Billing settings can be saved as INR; the settings body says tax is explicit-only and collection is manual; creating an invoice does not invent a tax rate.
 6. An intern’s matter list is empty until a task on that matter is assigned to them; another matter returns 404; they cannot read a task that is not assigned to them; the assignment is audited.
 7. Worker configuration rejects an n8n base URL whose host is `example.com`.
-8. The public homepage names Assar Law Firm, does not invent a lawyer, address, practice, testimonial, or result, labels sample screens as synthetic, and shows a BCI marketing-review gate. Demo booking shows the server’s real error when no inbox is configured.
-9. Lint, typecheck, unit and integration tests, and the production build are run and their results recorded. Browser checks cover the landing page at 1440 and 390, including reduced motion.
+8. The public homepage names Assar Law Firm, does not invent a lawyer, address, practice, testimonial, or result, and labels screenshots as synthetic. The long publication-review note lives in this document. The public page keeps a short footer notice and does not claim compliance. When no demo inbox is configured, the form is not shown.
+9. Lint, typecheck, unit and integration tests, and the production build are run and their results recorded. Browser checks cover the landing page at 1440 and 390, including reduced motion and a numeric contrast check.
+
+## Publication review (owner-facing, not the public hero)
+
+Publishing the marketing site is subject to review by an advocate. A research note dated 7 Nov 2026 described Bar Council of India Rule 36 as restricting advertising and solicitation. That note is not a certified copy of the rules. Only three original official PDFs were fully read in the research pack; amendments were not verified. This page does not offer a result, a win rate, or a comparison that claims another product fails. The software does not claim compliance with that rule. The public footer says only that publication as an advertisement needs advocate review and that the page does not offer a legal result.
+
+## Fulfilment against the approved request
+
+| Area           | In this branch                                                                                                        | External activation, not complete                                                                                                                                                                                                                                 |
+| -------------- | --------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Court record   | Manual court fields, CNR shape check, https link, manual verification, stale after 7 days                             | No eCourts, NJDG, or other court feed. `GET /v1/courts/provider` stays `external_activation_gate`                                                                                                                                                                 |
+| Hearing review | Outcome, note, next date, lawyer review, schedule-next as a manual hearing                                            | The next instant is a chosen 10:00 IST time, not a time from a court                                                                                                                                                                                              |
+| Typed dates    | Draft, lawyer approval, Asia/Kolkata reminders inside the firm                                                        | No statutory calculation                                                                                                                                                                                                                                          |
+| Messages       | Preview, consent, opt-out, mock delivery, signed mock webhook, WhatsApp Cloud API adapter                             | Live send needs the firm’s Meta app, system-user token, `whatsapp_business_messaging`, phone number id, app secret, verify token, a template Meta has approved, and a public HTTPS webhook. Default is off. This software does not claim the template is approved |
+| INR invoices   | Currency INR, explicit tax only, manual payment, portal view of issued and paid invoices                              | No GST rate, no card collection, no payment gateway                                                                                                                                                                                                               |
+| Intern         | Assigned-matter access, own task status, other matters hidden                                                         | None                                                                                                                                                                                                                                                              |
+| Client portal  | Documents, reviewed AI text, invoices, released messages, other clients 404                                           | A client does not see drafts                                                                                                                                                                                                                                      |
+| n8n            | Workflow files remain templates. Worker rejects an `example.com` webhook host. A disposable local n8n 1.123.92, not a project dependency, ran the committed workflows: 6 tests passed | `WORKFLOWS_ENABLED` still defaults to false. No production webhook is connected                                                                                                                   |
+| Landing        | Name only, real screenshots labelled synthetic, services, solutions, and pricing pages, demo hidden when unconfigured | An advocate has not signed the publication                                                                                                                                                                                                                        |
+
+## WhatsApp keys the firm must supply
+
+Do not invent these. Live activation is not done in this branch.
+
+- Meta app, owned by the firm
+- System-user access token with `whatsapp_business_messaging`
+- Phone number id
+- App secret for `X-Hub-Signature-256`
+- Verify token for the subscription handshake
+- Template name and language that Meta has already approved for that account (this software will not ask Meta whether it is approved)
+- HTTPS endpoint for the webhook, which this development environment does not publish
+
+The send URL is `https://graph.facebook.com/v27.0/{PHONE_NUMBER_ID}/messages`, the version in Meta’s send-messages curl on the page updated 4 Nov 2026. `WHATSAPP_GRAPH_VERSION` overrides it. A template-creation example on an older page uses v23.0 and is not the default.
+
+## OCR fixture
+
+On 7 Nov 2026 the jobs test “upscales small images” failed. The image was 700px wide and the engine widened it to 1600, which is the intended behaviour. The host’s generic `sans-serif` face was read as “Rent 1s 5000 per month” at confidence 93. The same pixels in Liberation Sans Bold or DejaVu Sans Bold read as “Rent is 5000 per month”. The test now registers one of those font files, still requires the phrase `rent is 5000`, and still requires the prepared width to be greater than 700. It does not accept “1s”.

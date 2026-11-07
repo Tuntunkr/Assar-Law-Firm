@@ -2,7 +2,7 @@ export const site = {
   name: 'Assar Law Firm',
   tagline: 'Practice software',
   description:
-    'Assar Law Firm’s software records matters, documents, tasks and invoices. Court entries and dates are typed by people. Client messages stay as previews until a provider is connected. AI, when a firm turns it on, stays a draft until a lawyer reviews it.',
+    'Assar Law Firm software for clients, documents, dates and invoices. Court entries are typed by a person. A client message waits for a lawyer. WhatsApp stays off until the firm connects it.',
   url: process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000',
   dashboardUrl: process.env.NEXT_PUBLIC_DASHBOARD_URL ?? 'http://localhost:3001',
   clientPortalUrl: process.env.NEXT_PUBLIC_CLIENT_PORTAL_URL ?? 'http://localhost:3002',
@@ -32,7 +32,7 @@ export const footerLinks = [
     title: 'Company',
     links: [
       { href: '/about', label: 'About' },
-      { href: '/contact', label: 'Book a Demo' },
+      { href: '/contact', label: 'Demo' },
       { href: '/faq', label: 'FAQ' },
       { href: '/login', label: 'Login' },
     ],

@@ -19,7 +19,7 @@ export async function POST(req: Request) {
     return fail(
       503,
       'NOT_CONFIGURED',
-      'Demo booking is not available yet. Please try again later.',
+      'Demo booking is not configured. No request was stored.',
     );
 
   try {

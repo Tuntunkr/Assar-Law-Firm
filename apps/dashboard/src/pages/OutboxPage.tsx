@@ -25,6 +25,8 @@ export function OutboxPage() {
   const [matterId, setMatterId] = useState('');
   const [channel, setChannel] = useState('email');
   const [templateLabel, setTemplateLabel] = useState('');
+  const [templateName, setTemplateName] = useState('');
+  const [templateLanguage, setTemplateLanguage] = useState('');
   const [body, setBody] = useState('');
   const [consent, setConsent] = useState(false);
 
@@ -32,7 +34,7 @@ export function OutboxPage() {
     <>
       <PageHeader
         title="Client updates"
-        description="Draft a preview. A lawyer approves it. Without a provider credential this stays inside Assar. Template approval is not claimed."
+        description="Draft a preview. A lawyer approves it. WhatsApp sends only when that connection is configured and the client has not opted out. Saving a template name does not mean it is approved."
       />
       <AsyncView
         state={state}
@@ -87,6 +89,7 @@ export function OutboxPage() {
                   ...(matterId ? { matterId } : {}),
                   channel,
                   templateLabel,
+                  ...(templateName || templateLanguage ? { templateName, templateLanguage } : {}),
                   body,
                   consent: { optedIn: true, namesFirm: true },
                 }),
@@ -115,6 +118,20 @@ export function OutboxPage() {
             label="Label"
             value={templateLabel}
             onChange={(ev) => setTemplateLabel(ev.target.value)}
+          />
+          <TextField
+            id="outbox-template"
+            label="WhatsApp template name"
+            value={templateName}
+            onChange={(ev) => setTemplateName(ev.target.value)}
+            hint="Lowercase letters, numbers, and underscores. Optional until WhatsApp is connected. This is not an approval."
+          />
+          <TextField
+            id="outbox-language"
+            label="Template language"
+            value={templateLanguage}
+            onChange={(ev) => setTemplateLanguage(ev.target.value)}
+            hint="For example en_US. Leave blank when you are not naming a template."
           />
           <TextAreaField
             id="outbox-body"

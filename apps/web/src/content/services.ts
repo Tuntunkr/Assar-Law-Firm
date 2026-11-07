@@ -13,28 +13,28 @@ export interface ProductPage {
 
 export const services: Feature[] = [
   {
-    title: 'Law firm management',
-    body: 'Organizations, teams, roles, clients, matters, calendar and tasks in one workspace.',
+    title: 'Matters and people',
+    body: 'Clients, teams, roles, matters, a calendar and tasks in one workspace. An intern sees only the matters they are assigned.',
   },
   {
-    title: 'AI Legal Copilot',
-    body: 'Summaries, drafting, extraction and document Q&A that always arrive as drafts for lawyer review.',
+    title: 'AI drafts',
+    body: 'Summaries and drafts stay off until the firm turns them on. What a model writes is a draft until a lawyer reviews it.',
   },
   {
-    title: 'Document & contract intelligence',
-    body: 'Versioned documents with clause review, key-date extraction and source references.',
+    title: 'Documents',
+    body: 'Versioned files in private storage, with the text the firm extracted from them. A date pulled from a file is still typed and checked.',
   },
   {
-    title: 'Workflow automation',
-    body: 'Reminders, onboarding and reporting automations that respect your permissions.',
+    title: 'Reminders',
+    body: 'In-firm reminders for a date a lawyer approved, and for an intern’s own task. Nothing is sent to a court.',
   },
   {
     title: 'Client portal',
-    body: 'Clients see only their own matters and documents your team has approved.',
+    body: 'A client sees their own shared documents, issued invoices and messages the firm has released.',
   },
   {
-    title: 'Billing & reporting',
-    body: 'Time entries, invoices and practice reports tied to matters.',
+    title: 'Invoices',
+    body: 'Time and expenses in the currency the firm chooses. The firm records a payment. No tax is added unless someone types a rate.',
   },
 ];
 
@@ -138,21 +138,6 @@ export const productPages: Record<string, ProductPage> = {
       'Automations call the platform through authenticated, permission-checked APIs. They cannot see more than the platform allows.',
   },
 };
-
-export const practiceAreas: Feature[] = [
-  {
-    title: 'Litigation',
-    body: 'Hearing dates, filings, chronologies and document-heavy case files.',
-  },
-  {
-    title: 'Corporate & commercial',
-    body: 'Contract review, diligence document sets and deal checklists.',
-  },
-  { title: 'Family law', body: 'Sensitive client communication and restricted-matter access.' },
-  { title: 'Real estate', body: 'Transaction checklists, parties and key dates.' },
-  { title: 'Employment', body: 'Policies, agreements and case timelines.' },
-  { title: 'Intellectual property', body: 'Deadlines, agreements and portfolio matters.' },
-];
 
 export const howItWorks: Feature[] = [
   {

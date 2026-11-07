@@ -31,6 +31,8 @@ export interface ServiceContext {
 
 export type AppRequest = Request & {
   id: string;
+  /** Exact JSON bytes, kept so a webhook signature can be checked against the raw body. */
+  rawBody?: Buffer;
   auth?: AuthContext;
   /**
    * The signed-in portal user. NOT named `client`: Node's IncomingMessage already has a `client` property (the socket),

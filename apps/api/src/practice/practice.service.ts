@@ -8,6 +8,15 @@ import {
   type OutboxDoc,
 } from '@assar/database';
 import { decideDelivery } from '@assar/types';
+import {
+  buildTemplateBody,
+  parseStatusWebhook,
+  sendTemplate,
+  signatureMatches,
+  statusRank,
+  whatsappConfig,
+  type StatusEvent,
+} from './whatsapp-cloud';
 import type { z } from 'zod';
 import type {
   createDeadlineSchema,
@@ -48,11 +57,15 @@ const outboxDto = (m: OutboxDoc) => ({
   matterId: m.matterId ? String(m.matterId) : null,
   channel: m.channel,
   templateLabel: m.templateLabel,
+  templateName: m.templateName ?? null,
+  templateLanguage: m.templateLanguage ?? null,
   body: m.body,
   providerTemplateApproval: 'not_claimed' as const,
   status: m.status,
   provider: m.provider,
   attempts: m.attempts,
+  providerMessageId: m.providerMessageId ?? null,
+  providerError: m.providerError ?? null,
   approvedAt: m.approvedAt ?? null,
 });
 
@@ -187,6 +200,9 @@ export class PracticeService {
       matterId: (input.matterId ?? null) as never,
       channel: input.channel,
       templateLabel: input.templateLabel,
+      templateName: input.templateName ?? null,
+      templateLanguage: input.templateLanguage ?? null,
+      bodyParameters: input.bodyParameters ?? [],
       body: input.body,
       providerTemplateApproval: 'not_claimed',
       consent: {
@@ -220,25 +236,87 @@ export class PracticeService {
       throw new ApiError(409, 'CONFLICT', 'This preview is not waiting for a lawyer');
     if (!current.consent?.optedIn || !current.consent?.namesFirm)
       throw new ApiError(409, 'CONFLICT', 'Record an opt-in that names the firm before approval');
-    const delivery = approve ? decideDelivery(this.env.MESSAGE_PROVIDER) : null;
+    if (!approve) {
+      const row = await outbox.update(auth.organizationId, id, {
+        status: 'rejected',
+        approvedBy: null,
+        approvedAt: null,
+      });
+      if (!row) throw new ApiError(404, 'NOT_FOUND', 'Preview not found');
+      await this.audit.record({
+        organizationId: auth.organizationId,
+        actorId: auth.userId,
+        action: 'outbox.rejected',
+        targetType: 'outbox',
+        targetId: id,
+        req,
+        meta: { status: row.status, provider: row.provider },
+      });
+      return outboxDto(row);
+    }
+    await this.assertWhatsAppAllowed(auth.organizationId, current);
+    if (this.env.MESSAGE_PROVIDER === 'whatsapp_cloud' && current.channel === 'whatsapp') {
+      return this.deliverWhatsApp(auth, current, req);
+    }
+    const delivery =
+      this.env.MESSAGE_PROVIDER === 'mock'
+        ? decideDelivery('mock')
+        : decideDelivery('unconfigured');
     const row = await outbox.update(auth.organizationId, id, {
-      status: approve ? delivery!.status : 'rejected',
-      provider: approve ? delivery!.provider : current.provider,
-      attempts: approve && delivery!.status === 'mock_delivered' ? 1 : 0,
-      approvedBy: approve ? auth.userId : null,
-      approvedAt: approve ? new Date() : null,
+      status: delivery.status,
+      provider: delivery.provider,
+      attempts: delivery.status === 'mock_delivered' ? 1 : 0,
+      approvedBy: auth.userId,
+      approvedAt: new Date(),
     });
     if (!row) throw new ApiError(404, 'NOT_FOUND', 'Preview not found');
     await this.audit.record({
       organizationId: auth.organizationId,
       actorId: auth.userId,
-      action: approve ? 'outbox.approved' : 'outbox.rejected',
+      action: 'outbox.approved',
       targetType: 'outbox',
       targetId: id,
       req,
       meta: { status: row.status, provider: row.provider },
     });
     return outboxDto(row);
+  }
+
+  /** Sends again only when the provider never accepted the message. A new preview is required after that. */
+  async retryOutbox(auth: AuthContext, id: string, req: Req) {
+    const current = await this.loadOutbox(auth, id, req);
+    if (current.status !== 'failed' || current.provider !== 'whatsapp_cloud')
+      throw new ApiError(409, 'CONFLICT', 'Only a failed WhatsApp send can be retried');
+    if (current.providerMessageId)
+      throw new ApiError(
+        409,
+        'CONFLICT',
+        'The provider already accepted this message. Write a new preview instead of sending it again.',
+      );
+    await this.assertWhatsAppAllowed(auth.organizationId, current);
+    return this.deliverWhatsApp(auth, current, req);
+  }
+
+  /**
+   * Applies one documented status webhook. The same event key is a replay.
+   * An earlier status does not replace a later one. A failure does not erase delivered or read.
+   */
+  async applyWhatsAppStatuses(raw: Buffer, header: string, body: unknown) {
+    const cfg = whatsappConfig(this.env);
+    if (!cfg)
+      throw new ApiError(
+        503,
+        'SERVICE_UNAVAILABLE',
+        'External activation gate: WhatsApp credentials are not configured',
+      );
+    if (!signatureMatches(cfg.appSecret, raw, header))
+      throw new ApiError(401, 'UNAUTHENTICATED', 'Webhook signature was rejected');
+    const events = parseStatusWebhook(body);
+    const results: { eventKey: string; replayed: boolean; status: string }[] = [];
+    for (const event of events) {
+      results.push(await this.applyOneStatus(cfg.phoneNumberId, event));
+    }
+    return { received: events.length, results };
   }
 
   /**
@@ -253,6 +331,118 @@ export class PracticeService {
       throw new ApiError(409, 'CONFLICT', 'Only a mock delivery can be acknowledged');
     await outbox.update(organizationId, outboxId, { $addToSet: { webhookEventIds: eventId } });
     return { replayed: false, status: row.status };
+  }
+
+  private async assertWhatsAppAllowed(organizationId: string, row: OutboxDoc) {
+    if (row.channel !== 'whatsapp') return;
+    const client = await clients.findById(organizationId, String(row.clientId));
+    if (client?.whatsappOptOutAt)
+      throw new ApiError(409, 'CONFLICT', 'This client has opted out of WhatsApp');
+  }
+
+  private async deliverWhatsApp(auth: AuthContext, current: OutboxDoc, req: Req) {
+    const cfg = whatsappConfig(this.env);
+    if (!cfg) {
+      const row = await outbox.update(auth.organizationId, String(current._id), {
+        status: 'external_activation_gate',
+        provider: 'whatsapp_cloud',
+        providerError: 'missing_credentials',
+        attempts: 0,
+        approvedBy: auth.userId,
+        approvedAt: new Date(),
+      });
+      if (!row) throw new ApiError(404, 'NOT_FOUND', 'Preview not found');
+      await this.audit.record({
+        organizationId: auth.organizationId,
+        actorId: auth.userId,
+        action: 'outbox.approved',
+        targetType: 'outbox',
+        targetId: String(current._id),
+        req,
+        meta: { status: row.status, provider: row.provider },
+      });
+      return outboxDto(row);
+    }
+    const client = await clients.findById(auth.organizationId, String(current.clientId));
+    const built = buildTemplateBody({
+      to: client?.phone ?? '',
+      templateName: current.templateName ?? '',
+      languageCode: current.templateLanguage ?? '',
+      bodyParameters: current.bodyParameters ?? [],
+      outboxId: String(current._id),
+    });
+    if (!built.ok) {
+      throw new ApiError(
+        400,
+        'VALIDATION_FAILED',
+        built.error === 'recipient_not_e164'
+          ? 'The client phone needs a plus and a country code. This software does not add one.'
+          : 'A WhatsApp template name and language are required. Saving them does not mean Meta has approved the template.',
+      );
+    }
+    if (current.providerMessageId) {
+      return outboxDto(current);
+    }
+    const sent = await sendTemplate(cfg, built.body, globalThis.fetch);
+    const row = await outbox.update(auth.organizationId, String(current._id), {
+      status: sent.ok ? 'accepted' : 'failed',
+      provider: 'whatsapp_cloud',
+      attempts: sent.attempts,
+      ...(sent.ok ? { providerMessageId: sent.messageId } : {}),
+      providerError: sent.ok ? null : sent.error,
+      approvedBy: current.approvedBy ?? auth.userId,
+      approvedAt: current.approvedAt ?? new Date(),
+    });
+    if (!row) throw new ApiError(404, 'NOT_FOUND', 'Preview not found');
+    await this.audit.record({
+      organizationId: auth.organizationId,
+      actorId: auth.userId,
+      action: sent.ok ? 'outbox.accepted' : 'outbox.failed',
+      targetType: 'outbox',
+      targetId: String(current._id),
+      req,
+      meta: { status: row.status, provider: row.provider, attempts: sent.attempts },
+    });
+    return outboxDto(row);
+  }
+
+  private async applyOneStatus(phoneNumberId: string, event: StatusEvent) {
+    const row = await outbox.findByProviderMessageId(event.messageId);
+    if (!row) return { eventKey: event.eventKey, replayed: false, status: 'ignored' };
+    if (event.phoneNumberId && event.phoneNumberId !== phoneNumberId) {
+      return { eventKey: event.eventKey, replayed: false, status: 'ignored' };
+    }
+    if (row.webhookEventIds.includes(event.eventKey)) {
+      return { eventKey: event.eventKey, replayed: true, status: row.status };
+    }
+    const current = statusRank(row.status);
+    const incoming = statusRank(event.status);
+    const keep =
+      event.status === 'failed' ? current >= statusRank('delivered') : incoming < current;
+    const next = keep ? row.status : event.status;
+    const updated = await outbox.update(String(row.organizationId), String(row._id), {
+      $set: {
+        status: next,
+        providerError:
+          event.status === 'failed' && !keep
+            ? `meta_${event.errorCode ?? 'unknown'}`
+            : (row.providerError ?? null),
+      },
+      $addToSet: { webhookEventIds: event.eventKey },
+    });
+    await this.audit.record({
+      organizationId: String(row.organizationId),
+      actorType: 'system',
+      action: 'outbox.webhook',
+      targetType: 'outbox',
+      targetId: String(row._id),
+      meta: { status: next, replayed: false },
+    });
+    return {
+      eventKey: event.eventKey,
+      replayed: false,
+      status: updated?.status ?? next,
+    };
   }
 
   private async loadDeadline(auth: AuthContext, id: string, req: Req) {

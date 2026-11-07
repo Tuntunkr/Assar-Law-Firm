@@ -284,6 +284,8 @@ export interface ClientDoc {
   email?: string;
   phone?: string;
   address?: string;
+  /** Set when the client has opted out of WhatsApp. A set date blocks a WhatsApp send. */
+  whatsappOptOutAt?: Date | null;
   status: 'active' | 'archived';
   createdBy: Id;
   createdAt: Date;
@@ -298,6 +300,7 @@ const clientSchema = new Schema<ClientDoc>(
     email: { type: String, lowercase: true, trim: true, maxlength: 254 },
     phone: { type: String, maxlength: 40 },
     address: { type: String, maxlength: 500 },
+    whatsappOptOutAt: { type: Date, default: null },
     status: { type: String, enum: ['active', 'archived'], default: 'active' },
     createdBy: { type: Schema.Types.ObjectId, required: true },
   },
@@ -1355,6 +1358,10 @@ export interface OutboxDoc {
   matterId?: Id | null;
   channel: 'email' | 'whatsapp';
   templateLabel: string;
+  /** Cloud API template name. Present does not mean Meta has approved it. */
+  templateName?: string | null;
+  templateLanguage?: string | null;
+  bodyParameters?: string[];
   body: string;
   /** Always `not_claimed`. This product does not mark a provider template as approved. */
   providerTemplateApproval: 'not_claimed';
@@ -1365,9 +1372,22 @@ export interface OutboxDoc {
     recordedBy: Id;
     recordedAt: Date;
   };
-  status: 'draft' | 'pending_approval' | 'rejected' | 'mock_delivered' | 'external_activation_gate';
-  provider: 'mock' | 'unconfigured';
+  status:
+    | 'draft'
+    | 'pending_approval'
+    | 'rejected'
+    | 'mock_delivered'
+    | 'external_activation_gate'
+    | 'accepted'
+    | 'sent'
+    | 'delivered'
+    | 'read'
+    | 'played'
+    | 'failed';
+  provider: 'mock' | 'unconfigured' | 'whatsapp_cloud';
   attempts: number;
+  providerMessageId?: string;
+  providerError?: string | null;
   approvedBy?: Id | null;
   approvedAt?: Date | null;
   webhookEventIds: string[];
@@ -1382,6 +1402,9 @@ const outboxSchema = new Schema<OutboxDoc>(
     matterId: { type: Schema.Types.ObjectId, default: null },
     channel: { type: String, enum: ['email', 'whatsapp'], required: true },
     templateLabel: { type: String, required: true, maxlength: 120 },
+    templateName: { type: String, maxlength: 512 },
+    templateLanguage: { type: String, maxlength: 16 },
+    bodyParameters: { type: [String], default: [] },
     body: { type: String, required: true, maxlength: 5000 },
     providerTemplateApproval: { type: String, enum: ['not_claimed'], default: 'not_claimed' },
     consent: {
@@ -1399,11 +1422,29 @@ const outboxSchema = new Schema<OutboxDoc>(
     },
     status: {
       type: String,
-      enum: ['draft', 'pending_approval', 'rejected', 'mock_delivered', 'external_activation_gate'],
+      enum: [
+        'draft',
+        'pending_approval',
+        'rejected',
+        'mock_delivered',
+        'external_activation_gate',
+        'accepted',
+        'sent',
+        'delivered',
+        'read',
+        'played',
+        'failed',
+      ],
       default: 'draft',
     },
-    provider: { type: String, enum: ['mock', 'unconfigured'], default: 'unconfigured' },
+    provider: {
+      type: String,
+      enum: ['mock', 'unconfigured', 'whatsapp_cloud'],
+      default: 'unconfigured',
+    },
     attempts: { type: Number, default: 0 },
+    providerMessageId: { type: String },
+    providerError: { type: String, maxlength: 80, default: null },
     approvedBy: { type: Schema.Types.ObjectId, default: null },
     approvedAt: { type: Date, default: null },
     webhookEventIds: { type: [String], default: [] },
@@ -1413,4 +1454,6 @@ const outboxSchema = new Schema<OutboxDoc>(
 );
 outboxSchema.index({ organizationId: 1, _id: -1 });
 outboxSchema.index({ organizationId: 1, status: 1, _id: -1 });
+outboxSchema.index({ organizationId: 1, clientId: 1, matterId: 1, status: 1 });
+outboxSchema.index({ providerMessageId: 1 }, { unique: true, sparse: true });
 export const OutboxModel = define<OutboxDoc>('Outbox', outboxSchema);

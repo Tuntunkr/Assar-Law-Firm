@@ -69,10 +69,31 @@ const object = z.object({
   AI_ENABLED: bool.default('false'),
   /** Publish workflow events (matter.created, ...) to the queue for delivery to n8n by the worker. */
   WORKFLOWS_ENABLED: bool.default('false'),
-  /** `mock` records a delivery without a network call. Anything else is an activation gate. */
-  MESSAGE_PROVIDER: z.enum(['mock', 'unconfigured']).default('unconfigured'),
+  /**
+   * `mock` records a delivery without a network call.
+   * `whatsapp_cloud` uses the Cloud API adapter and still sends nothing until every credential below is set.
+   * `unconfigured` is the default and is an activation gate.
+   */
+  MESSAGE_PROVIDER: z.enum(['mock', 'unconfigured', 'whatsapp_cloud']).default('unconfigured'),
   /** Required before the mock webhook will accept a callback. Never invent a value. */
   MESSAGE_WEBHOOK_SECRET: z.string().min(16).optional(),
+  /**
+   * Graph version from Meta's send-messages curl (page updated 4 Nov 2026), which uses v27.0.
+   * Override only with the version printed in a later official curl. Do not invent one.
+   */
+  WHATSAPP_GRAPH_VERSION: z
+    .string()
+    .regex(/^v\d+\.\d+$/)
+    .default('v27.0'),
+  WHATSAPP_PHONE_NUMBER_ID: z
+    .string()
+    .regex(/^\d{6,32}$/)
+    .optional(),
+  WHATSAPP_ACCESS_TOKEN: z.string().min(20).optional(),
+  WHATSAPP_APP_SECRET: z.string().min(8).optional(),
+  WHATSAPP_VERIFY_TOKEN: z.string().min(8).optional(),
+  /** Delay before a retry of HTTP 429 or 5xx. Tests set 0. Three attempts, then a failed row. */
+  WHATSAPP_RETRY_BASE_MS: z.coerce.number().int().min(0).max(10_000).default(200),
   AI_MAX_ACTIVE_JOBS_PER_ORG: z.coerce.number().int().min(1).default(5),
   AI_JOB_MAX_ATTEMPTS: z.coerce.number().int().min(1).max(10).default(3),
   SCAN_JOB_MAX_ATTEMPTS: z.coerce.number().int().min(1).max(10).default(3),

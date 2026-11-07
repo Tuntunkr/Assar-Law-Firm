@@ -217,6 +217,25 @@ export interface PortalMatter {
   openedAt: string;
   closedAt: string | null;
 }
+export interface PortalInvoice {
+  id: string;
+  matterId: string;
+  number: string | null;
+  status: 'issued' | 'paid';
+  currency: string;
+  totalCents: number;
+  balanceCents: number;
+  issuedAt: string | null;
+  dueAt: string | null;
+}
+export interface PortalMessage {
+  id: string;
+  matterId: string;
+  channel: 'email' | 'whatsapp';
+  body: string;
+  status: string;
+  approvedAt: string | null;
+}
 export interface PortalDocument {
   id: string;
   matterId: string;

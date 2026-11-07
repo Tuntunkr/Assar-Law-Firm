@@ -5,6 +5,7 @@ import type {
   clientListQuerySchema,
   createClientSchema,
   updateClientSchema,
+  whatsappOptOutSchema,
 } from '@assar/validation';
 import { AuditService } from '../audit/audit.service';
 import type { AppRequest, AuthContext } from '../common/auth-context';
@@ -20,6 +21,7 @@ export const clientDto = (c: ClientRow) => ({
   email: c.email ?? null,
   phone: c.phone ?? null,
   address: c.address ?? null,
+  whatsappOptOutAt: c.whatsappOptOutAt ?? null,
   status: c.status,
   createdAt: c.createdAt,
   updatedAt: c.updatedAt,
@@ -65,6 +67,30 @@ export class ClientsService {
       targetId: id,
       req,
       meta: { fields: Object.keys(patch) },
+    });
+    return clientDto(c);
+  }
+
+  async setWhatsAppOptOut(
+    auth: AuthContext,
+    id: string,
+    input: z.infer<typeof whatsappOptOutSchema>,
+    req: Req,
+  ) {
+    const existing = await clients.findById(auth.organizationId, id);
+    if (!existing) throw new ApiError(404, 'NOT_FOUND', 'Client not found');
+    const c = await clients.update(auth.organizationId, id, {
+      whatsappOptOutAt: input.optedOut ? new Date() : null,
+    });
+    if (!c) throw new ApiError(404, 'NOT_FOUND', 'Client not found');
+    await this.audit.record({
+      organizationId: auth.organizationId,
+      actorId: auth.userId,
+      action: 'client.whatsapp_opt_out',
+      targetType: 'client',
+      targetId: id,
+      req,
+      meta: { optedOut: input.optedOut },
     });
     return clientDto(c);
   }

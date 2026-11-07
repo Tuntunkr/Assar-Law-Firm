@@ -1,7 +1,27 @@
+import { existsSync } from 'node:fs';
 import { GlobalFonts, createCanvas } from '@napi-rs/canvas';
+import sharp from 'sharp';
 import { afterAll, describe, expect, it } from 'vitest';
 import { extractDocument } from './extract.js';
 import { OcrEngine, prepareTessdata } from './ocr.js';
+
+/**
+ * The generic family `sans-serif` on this machine drew a face whose letters "is"
+ * Tesseract read as "1s" (confidence 93) after the existing 700→1600 upscale.
+ * The same pixels drawn in Liberation Sans or DejaVu Sans Bold read as "is".
+ * The fixture registers one of those files so the assertion checks recognition,
+ * not whichever face the host maps to sans-serif. The upscale itself is unchanged.
+ */
+const FIXTURE_FONT = [
+  '/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf',
+  '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
+].find((p) => existsSync(p));
+if (!FIXTURE_FONT) {
+  throw new Error(
+    'OCR fixture font missing. Install fonts-liberation or fonts-dejavu. The test does not fall back to sans-serif.',
+  );
+}
+GlobalFonts.registerFromPath(FIXTURE_FONT, 'AssarOcr');
 
 /** Draws lines of text on a white page, like a clean scan. */
 function scan(lines: string[], o: { width?: number; rotate?: boolean } = {}) {
@@ -11,7 +31,7 @@ function scan(lines: string[], o: { width?: number; rotate?: boolean } = {}) {
   ctx.fillStyle = '#fff';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.fillStyle = '#000';
-  ctx.font = 'bold 48px sans-serif';
+  ctx.font = 'bold 48px AssarOcr';
   lines.forEach((l, i) => ctx.fillText(l, 60, 100 + i * 90));
   return canvas;
 }
@@ -106,9 +126,10 @@ describe('OCR (self-hosted Tesseract)', () => {
   }, 60_000);
 
   it('upscales small images so low-resolution scans are still readable', async () => {
-    const r = await extractDocument(png(['Rent is 5000 per month'], { width: 700 }), 'image/png', {
-      ocr,
-    });
+    const src = png(['Rent is 5000 per month'], { width: 700 });
+    const prepared = await sharp(await OcrEngine.prepare(src)).metadata();
+    expect(prepared.width).toBeGreaterThan(700);
+    const r = await extractDocument(src, 'image/png', { ocr });
     expect(words(r.text)).toContain('rent is 5000');
   }, 60_000);
 

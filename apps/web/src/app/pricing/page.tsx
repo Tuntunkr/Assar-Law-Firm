@@ -1,47 +1,41 @@
 import type { Metadata } from 'next';
-import { ButtonLink, Section } from '@assar/ui';
+import { Section } from '@assar/ui';
 import { PageHero } from '@/components/PageHero';
-import { plans } from '@/content/pricing';
 
-export const metadata: Metadata = { title: 'Pricing', description: 'Assar Law Firm plans.' };
+export const metadata: Metadata = {
+  title: 'Pricing',
+  description: 'No price is published for the Assar Law Firm software.',
+};
+
+const included = [
+  'Clients, matters, documents and tasks for a signed-in firm',
+  'Hearing notes and typed dates, reviewed by a lawyer',
+  'Invoices in a currency the firm chooses, with payment recorded by hand',
+  'A client portal for that client’s invoices and released messages',
+  'WhatsApp prepared in the software and left off until the firm adds its own keys',
+];
 
 export default function Page() {
   return (
     <>
       <PageHero
         title="Pricing"
-        summary="No price, tax rate, or plan is approved. The figures below are labels only. The demo form reaches a person only when a demo inbox is configured."
+        summary="No price, plan or tax is published. This page does not take a payment and it does not quote a fee."
         cta={false}
       />
-      <Section title="Plans">
-        <ul className="grid gap-5 lg:grid-cols-3">
-          {plans.map((p) => (
-            <li
-              key={p.id}
-              className={`flex flex-col rounded-xl border p-6 ${p.highlighted ? 'border-accent-500 ring-1 ring-accent-500' : 'border-navy-100'}`}
-            >
-              <h2 className="text-xl font-semibold">{p.name}</h2>
-              <p className="text-sm text-navy-600">{p.audience}</p>
-              <p className="mt-4 text-2xl font-semibold">
-                {p.priceMonthly === null
-                  ? 'Pricing on request'
-                  : `${p.currency} ${p.priceMonthly}/mo`}
-              </p>
-              <ul className="mt-4 flex-1 space-y-2 text-sm text-navy-700">
-                {p.features.map((f) => (
-                  <li key={f}>{f}</li>
-                ))}
-              </ul>
-              <ButtonLink
-                href="/contact"
-                className="mt-6"
-                variant={p.highlighted ? 'primary' : 'secondary'}
-              >
-                Book a Demo
-              </ButtonLink>
-            </li>
-          ))}
-        </ul>
+      <Section title="What the software contains">
+        <div className="max-w-2xl rounded-xl border border-navy-200 bg-white p-6">
+          <h2 className="text-xl font-semibold text-navy-950">No price is published</h2>
+          <p className="mt-2 text-sm leading-6 text-navy-700">
+            There is no monthly fee, setup fee or rupee amount on this page. A figure here would be
+            invented, so none is shown.
+          </p>
+          <ul className="mt-4 space-y-2 text-sm text-navy-800">
+            {included.map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+        </div>
       </Section>
     </>
   );

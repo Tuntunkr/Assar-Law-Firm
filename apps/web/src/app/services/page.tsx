@@ -14,7 +14,7 @@ export default function Page() {
     <>
       <PageHero
         title="Services"
-        summary="Practice management, AI assistance, documents and automation."
+        summary="The parts of the workspace a signed-in firm can use. A court feed and WhatsApp stay disconnected until the firm connects them."
       />
       <Section title="What we offer">
         <FeatureGrid items={services} />

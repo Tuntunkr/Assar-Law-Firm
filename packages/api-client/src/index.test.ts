@@ -112,10 +112,14 @@ describe('portal client', () => {
     const { client, calls } = setup(() => json({ data: [] }));
     await client.listMatters();
     await client.listDocuments('m1');
+    await client.listInvoices('m1');
+    await client.listMessages('m1');
     await client.listAiOutputs('m1');
     expect(calls.map((c) => new URL(c.url).pathname)).toEqual([
       '/v1/portal/matters',
       '/v1/portal/matters/m1/documents',
+      '/v1/portal/matters/m1/invoices',
+      '/v1/portal/matters/m1/messages',
       '/v1/portal/matters/m1/ai-outputs',
     ]);
   });

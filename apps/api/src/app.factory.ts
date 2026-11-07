@@ -7,6 +7,7 @@ import type { DestinationStream } from 'pino';
 import { AppModule } from './app.module';
 import { LOGGER, type Logger } from './common/logger';
 import { requestIdMiddleware } from './common/request-id.middleware';
+import type { AppRequest } from './common/auth-context';
 import type { Env } from './config/env';
 
 export interface CreateAppOptions {
@@ -57,7 +58,12 @@ export async function createApp(
   });
 
   // Small JSON bodies only. File bytes never go through the API process (they use signed storage URLs).
-  app.useBodyParser('json', { limit: env.MAX_JSON_BODY_BYTES });
+  app.useBodyParser('json', {
+    limit: env.MAX_JSON_BODY_BYTES,
+    verify(req: Request, _res: Response, buf: Buffer) {
+      (req as AppRequest).rawBody = Buffer.from(buf);
+    },
+  } as never);
   app.useBodyParser('urlencoded', { extended: false, limit: env.MAX_JSON_BODY_BYTES });
   app.use(cookieParser());
   app.enableCors({

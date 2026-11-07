@@ -34,7 +34,7 @@ export function SiteHeader() {
           <Link href="/login" className="text-sm font-medium text-navy-700 hover:text-navy-950">
             Login
           </Link>
-          <ButtonLink href="/contact">Book a Demo</ButtonLink>
+          <ButtonLink href="/contact">Demo</ButtonLink>
         </div>
         <button
           type="button"
@@ -75,7 +75,7 @@ export function SiteHeader() {
               </Link>
             ))}
             <ButtonLink href="/contact" className="mt-2" onClick={() => setOpen(false)}>
-              Book a Demo
+              Demo
             </ButtonLink>
           </Container>
         </nav>

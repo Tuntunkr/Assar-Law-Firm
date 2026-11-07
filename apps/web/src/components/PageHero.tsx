@@ -17,7 +17,7 @@ export function PageHero({
         {cta && (
           <div className="mt-8">
             <ButtonLink href="/contact" size="lg">
-              Book a Demo
+              Demo
             </ButtonLink>
           </div>
         )}
