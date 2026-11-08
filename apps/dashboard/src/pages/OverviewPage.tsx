@@ -86,7 +86,7 @@ function Panel({
       <div className="mb-4 flex items-center justify-between">
         <h2 className="font-semibold text-navy-900">{title}</h2>
         {to && (
-          <Link to={to} className="text-sm font-medium text-accent-700 hover:underline">
+          <Link to={to} className="text-sm inline-flex min-h-11 items-center font-medium text-accent-700 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-500">
             {linkText}
           </Link>
         )}

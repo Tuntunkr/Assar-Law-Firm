@@ -211,6 +211,12 @@ await must('POST', '/v1/outbox', {
   body: 'This preview stays on this computer until a lawyer approves it. Approval with local delivery still does not send email.',
   consent: { optedIn: true, namesFirm: true, note: 'Synthetic opt-in for the local demo.' },
 });
+await must('PUT', '/v1/billing/settings', {
+  currency: 'INR',
+  defaultHourlyRateCents: 200000,
+  defaultTaxRateBp: 0,
+  invoiceDueDays: 15,
+});
 const invoice = await must('POST', '/v1/invoices', { clientId: client.id, taxRateBp: 0 });
 await must('POST', `/v1/invoices/${invoice.id}/lines`, {
   type: 'expense',

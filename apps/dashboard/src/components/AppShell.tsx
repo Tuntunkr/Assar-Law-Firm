@@ -86,8 +86,9 @@ export function AppShell() {
     (compact: boolean) =>
     ({ isActive }: { isActive: boolean }) =>
       cn(
-        'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
-        compact && 'justify-center px-0',
+        'flex min-h-11 items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+        'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white',
+        compact && 'min-w-11 justify-center px-0',
         isActive
           ? 'bg-blue-600 text-white shadow-sm'
           : 'text-slate-300 hover:bg-white/5 hover:text-white',
@@ -142,7 +143,7 @@ export function AppShell() {
           type="button"
           onClick={() => setCollapsed((c) => !c)}
           className={cn(
-            'hidden w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-400 hover:bg-white/5 hover:text-white lg:flex',
+            'hidden min-h-11 w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-400 hover:bg-white/5 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white lg:flex',
             compact && 'justify-center px-0',
           )}
           aria-label={compact ? 'Expand sidebar' : 'Collapse sidebar'}
@@ -183,20 +184,20 @@ export function AppShell() {
         </div>
       )}
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-30 flex items-center gap-3 border-b border-navy-100 bg-white/90 px-4 py-2.5 backdrop-blur sm:px-8">
+        <header className="sticky top-0 z-30 flex flex-wrap items-center gap-2 border-b border-navy-100 bg-white/90 px-3 py-2 backdrop-blur sm:gap-3 sm:px-8">
           <button
-            className="rounded-md p-2 text-navy-800 hover:bg-navy-50 lg:hidden"
+            className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-md text-navy-800 hover:bg-navy-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-500 lg:hidden"
             aria-label="Open menu"
             onClick={() => setDrawer(true)}
           >
             <Icon name="menu" />
           </button>
-          <p className="text-base font-semibold text-navy-900">{titleFor(pathname)}</p>
-          <div className="flex-1" />
+          <p className="min-w-0 truncate text-base font-semibold text-navy-900">{titleFor(pathname)}</p>
+          <div className="hidden min-w-4 flex-1 sm:block" />
           <button
             type="button"
             onClick={() => setPalette(true)}
-            className="hidden w-56 items-center gap-2 rounded-xl border border-navy-100 bg-white px-3 py-2 text-sm text-navy-500 hover:border-navy-200 sm:flex"
+            className="hidden min-h-11 w-56 items-center gap-2 rounded-xl border border-navy-100 bg-white px-3 py-2 text-sm text-navy-500 hover:border-navy-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-500 sm:flex"
             aria-label="Search (Command K)"
           >
             <Icon name="search" size={15} />
@@ -208,7 +209,7 @@ export function AppShell() {
           <button
             type="button"
             onClick={() => setPalette(true)}
-            className="rounded-md p-2 text-navy-700 hover:bg-navy-50 sm:hidden"
+            className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-md text-navy-700 hover:bg-navy-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-500 sm:hidden"
             aria-label="Search"
           >
             <Icon name="search" />
@@ -219,7 +220,7 @@ export function AppShell() {
             type="button"
             onClick={toggle}
             aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-            className="rounded-md p-2 text-navy-700 hover:bg-navy-50"
+            className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-md text-navy-700 hover:bg-navy-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-500"
           >
             <Icon name={theme === 'dark' ? 'sun' : 'moon'} />
           </button>
@@ -228,7 +229,7 @@ export function AppShell() {
               type="button"
               onClick={() => setMenu((m) => !m)}
               aria-expanded={menu}
-              className="flex items-center gap-2 rounded-xl py-1 pl-1 pr-2 hover:bg-navy-50"
+              className="flex min-h-11 items-center gap-2 rounded-xl py-1 pl-1 pr-2 hover:bg-navy-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-500"
             >
               <span className="grid h-8 w-8 place-items-center rounded-full bg-indigo-600 text-xs font-semibold text-white">
                 {initials(me.user.name)}
@@ -245,7 +246,7 @@ export function AppShell() {
                 onMouseLeave={() => setMenu(false)}
               >
                 <button
-                  className="block w-full rounded-lg px-3 py-2 text-left text-sm text-navy-800 hover:bg-navy-50"
+                  className="flex min-h-11 w-full items-center rounded-lg px-3 py-2 text-left text-sm text-navy-800 hover:bg-navy-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-500"
                   onClick={() => {
                     setMenu(false);
                     navigate('/profile');
@@ -254,7 +255,7 @@ export function AppShell() {
                   My profile
                 </button>
                 <button
-                  className="block w-full rounded-lg px-3 py-2 text-left text-sm text-navy-800 hover:bg-navy-50"
+                  className="flex min-h-11 w-full items-center rounded-lg px-3 py-2 text-left text-sm text-navy-800 hover:bg-navy-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-500"
                   onClick={async () => {
                     setMenu(false);
                     await logout();
@@ -271,7 +272,7 @@ export function AppShell() {
           id="content"
           ref={main}
           tabIndex={-1}
-          className="mx-auto w-full max-w-7xl flex-1 px-4 py-8 outline-none sm:px-8"
+          className="mx-auto w-full min-w-0 max-w-7xl flex-1 px-4 py-8 outline-none sm:px-8"
         >
           <Outlet />
         </main>

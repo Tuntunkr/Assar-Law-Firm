@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Icon } from './Icon';
 import { useAuth } from '../lib/auth';
 import { formatDateTime } from '../lib/format';
 import { useAsync } from '../lib/useAsync';
@@ -33,9 +34,9 @@ export function NotificationBell() {
         onClick={() => setOpen((o) => !o)}
         aria-label={`Notifications${unread ? `, ${unread} unread` : ''}`}
         aria-expanded={open}
-        className="relative rounded-md p-2 text-navy-800 hover:bg-navy-50"
+        className="relative inline-flex size-11 items-center justify-center rounded-md text-navy-800 hover:bg-navy-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-500"
       >
-        <span aria-hidden="true">🔔</span>
+        <Icon name="bell" size={18} />
         {unread > 0 && (
           <span className="absolute right-0.5 top-0.5 min-w-4 rounded-full bg-accent-600 px-1 text-[10px] font-semibold leading-4 text-white">
             {unread > 9 ? '9+' : unread}
@@ -48,7 +49,7 @@ export function NotificationBell() {
             <p className="text-sm font-semibold text-navy-900">Notifications</p>
             {unread > 0 && (
               <button
-                className="text-xs font-medium text-accent-700 hover:underline"
+                className="inline-flex min-h-11 items-center text-xs font-medium text-accent-700 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-500"
                 onClick={async () => {
                   await client.markAllNotificationsRead();
                   state.reload();
@@ -71,7 +72,7 @@ export function NotificationBell() {
               state.data.data.map((n) => (
                 <li key={n.id} className="border-b border-navy-50 last:border-0">
                   <button
-                    className="block w-full px-4 py-3 text-left hover:bg-navy-50"
+                    className="block min-h-11 w-full px-4 py-3 text-left hover:bg-navy-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-500"
                     onClick={async () => {
                       if (!n.readAt) await client.markNotificationRead(n.id).catch(() => undefined);
                       setOpen(false);
