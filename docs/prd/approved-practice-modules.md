@@ -1,5 +1,7 @@
 # PRD — approved practice modules
 
+The master requirements document is [assar-law-firm-master-prd.md](assar-law-firm-master-prd.md) (ASSAR-PRD-2026-11-08, version 1.0). This file remains the fulfilment note for the six modules approved on 7 Nov 2026. Where they disagree, the master document’s status labels win.
+
 Baseline commit: `a6314727bbffe3908a52b13457bd9e0bf39c6bd0` (`main` at the start of this work).  
 Branch: `cursor/approved-practice-modules-d89d`.  
 This document is the product requirement for the six modules the owner approved on 7 Nov 2026. It is not a statute, not a Bar Council opinion, and not a tax opinion.
