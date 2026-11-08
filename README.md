@@ -32,16 +32,28 @@ docs/                 Architecture, API notes, runbooks
 
 - Node.js **22+**
 - [pnpm](https://pnpm.io/) **9.x**
-- MongoDB, Redis, and S3-compatible storage (see `.env.example` in each app)
+- MongoDB as a replica set, and Redis. The local script uses `127.0.0.1:27117` and `127.0.0.1:6380`. S3 is for production storage. Local demo files stay on disk.
 
 ## Quick start
 
+Configuration is the root `.env.example`. The API and the worker load that root file. There is no `apps/api/.env.example`.
+
 ```bash
 pnpm install
-cp apps/api/.env.example apps/api/.env    # fill in values
-cp apps/worker/.env.example apps/worker/.env
+bash scripts/dev-services.sh start
+cp .env.example .env
 pnpm dev
 ```
+
+A synthetic firm on this computer, with registration turned off after seeding:
+
+```bash
+bash scripts/local-demo.sh start
+bash scripts/local-demo.sh status
+bash scripts/local-demo.sh stop
+```
+
+Login material is written only to `.data/demo-login.txt`. See [docs/localhost.md](docs/localhost.md). That path is this computer, not a production host.
 
 | App | Default URL |
 | --- | ----------- |
@@ -66,6 +78,8 @@ pnpm typecheck    # TypeScript project references
 - [Auth & organizations](docs/api/auth-and-organizations.md)
 - [Client portal](docs/api/client-portal.md)
 - [Worker runbook](docs/runbooks/worker.md)
+- [Local synthetic demo](docs/localhost.md)
+- [Master PRD](docs/prd/assar-law-firm-master-prd.md)
 
 ## Security
 

@@ -362,6 +362,48 @@ export const outboxDraftSchema = z
 
 export const whatsappOptOutSchema = z.object({ optedOut: z.boolean() });
 
+const httpsUrl = z
+  .string()
+  .trim()
+  .url()
+  .max(500)
+  .refine((u) => u.startsWith('https://'), 'Use an https link');
+
+export const courtImportRowSchema = z.object({
+  externalId: z.string().trim().min(1).max(80),
+  courtName: z.string().trim().min(2).max(200),
+  caseNumber: z.string().trim().min(1).max(100),
+  title: z.string().trim().min(2).max(200),
+  listedOn: dateOnly,
+  sourceName: z.string().trim().min(2).max(120),
+  sourceUrl: httpsUrl,
+  retrievedAt: z.string().datetime({ offset: true }),
+  retry: z.boolean().optional(),
+});
+export const courtImportBatchSchema = z.object({
+  rows: z.array(courtImportRowSchema).min(1).max(50),
+});
+
+export const demoBookingSchema = demoRequestSchema.extend({
+  slotStart: z.string().datetime({ offset: true }),
+});
+
+export const courtFormDraftSchema = z.object({
+  title: z.string().trim().min(2).max(200),
+  jurisdiction: z.string().trim().min(2).max(150).default('unknown'),
+  caseType: z.string().trim().min(2).max(150).default('unknown'),
+  body: z.string().trim().min(2).max(50_000),
+  officialSourceTitle: z.string().trim().min(2).max(200),
+  officialSourceUrl: httpsUrl,
+  sourceRetrievedOn: dateOnly,
+});
+export const courtFormSignoffSchema = z.object({
+  decision: z.enum(['legally_approved', 'rejected']),
+  /** The person states they are a licensed advocate. The software does not check a roll. */
+  advocateDeclaration: z.literal(true),
+  note: z.string().trim().min(10).max(2000),
+});
+
 export const webhookAckSchema = z.object({
   eventId: z.string().trim().min(8).max(200),
   outboxId: objectIdSchema,

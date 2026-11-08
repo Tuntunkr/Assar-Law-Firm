@@ -38,6 +38,8 @@ export const PERMISSIONS = [
   'deadline:approve',
   /** Approve a client-message preview. Does not itself send. */
   'message:approve',
+  /** Mark a draft court form legally approved. Not a bar-license check. */
+  'form:approve',
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 
@@ -97,6 +99,7 @@ const LAWYER_ONLY: readonly Permission[] = [
   'hearing:review',
   'deadline:approve',
   'message:approve',
+  'form:approve',
 ];
 
 export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
@@ -119,6 +122,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'hearing:review',
     'deadline:approve',
     'message:approve',
+    'form:approve',
   ],
   paralegal: [
     'client:read',

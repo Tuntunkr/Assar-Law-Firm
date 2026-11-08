@@ -282,6 +282,7 @@ export interface InvoiceSummaryDto {
   subtotalCents: number;
   taxRateBp: number;
   taxCents: number;
+  accountantReviewedAt: string | null;
   totalCents: number;
   amountPaidCents: number;
   balanceCents: number;
@@ -603,6 +604,7 @@ export function createStaffClient(options: ClientOptions) {
     removeInvoiceLine: (id: string, lineId: string) =>
       del<InvoiceDto>(`/invoices/${id}/lines/${lineId}`),
     issueInvoice: (id: string) => post<InvoiceDto>(`/invoices/${id}/issue`),
+    reviewInvoiceTax: (id: string) => post<InvoiceDto>(`/invoices/${id}/accountant-review`),
     recordPayment: (id: string, b: Record<string, unknown>) =>
       post<InvoiceDto>(`/invoices/${id}/payments`, b, idem()),
     voidInvoice: (id: string, reason: string) =>

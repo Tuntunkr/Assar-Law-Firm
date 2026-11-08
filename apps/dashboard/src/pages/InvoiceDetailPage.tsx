@@ -83,6 +83,17 @@ export function InvoiceDetailPage() {
               actions={
                 write && (
                   <>
+                    {inv.status === 'draft' && inv.taxRateBp > 0 && !inv.accountantReviewedAt && (
+                      <Button
+                        variant="secondary"
+                        loading={act.busy}
+                        onClick={() =>
+                          done(() => client.reviewInvoiceTax(id), 'Accountant review recorded')
+                        }
+                      >
+                        Record accountant review
+                      </Button>
+                    )}
                     {inv.status === 'draft' && (
                       <Button
                         loading={act.busy}

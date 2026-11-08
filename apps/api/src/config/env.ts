@@ -94,6 +94,19 @@ const object = z.object({
   WHATSAPP_VERIFY_TOKEN: z.string().min(8).optional(),
   /** Delay before a retry of HTTP 429 or 5xx. Tests set 0. Three attempts, then a failed row. */
   WHATSAPP_RETRY_BASE_MS: z.coerce.number().int().min(0).max(10_000).default(200),
+  /**
+   * `manual` does not fetch a court. `import` accepts a file the firm already obtained.
+   * Neither mode calls a court website.
+   */
+  COURT_FEED: z.enum(['manual', 'import']).default('manual'),
+  /**
+   * `off` leaves email on the message-provider path.
+   * `local` stores the approved email on this machine and does not open a socket.
+   * `smtp` is accepted and still does not send. Live SMTP is deferred.
+   */
+  EMAIL_DELIVERY: z.enum(['off', 'local', 'smtp']).default('off'),
+  /** `local` stores a synthetic demo booking. `off` stores nothing. */
+  DEMO_BOOKING: z.enum(['off', 'local']).default('off'),
   AI_MAX_ACTIVE_JOBS_PER_ORG: z.coerce.number().int().min(1).default(5),
   AI_JOB_MAX_ATTEMPTS: z.coerce.number().int().min(1).max(10).default(3),
   SCAN_JOB_MAX_ATTEMPTS: z.coerce.number().int().min(1).max(10).default(3),

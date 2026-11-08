@@ -1,27 +1,45 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Alert, Button, SelectField, TextAreaField, TextField } from '@assar/ui';
-import { demoRequestSchema } from '@assar/validation';
+import { demoBookingSchema, demoRequestSchema } from '@assar/validation';
 
 type Errors = Partial<Record<string, string>>;
 type State =
   { kind: 'idle' } | { kind: 'sending' } | { kind: 'ok' } | { kind: 'error'; message: string };
 
-export function DemoForm() {
+export function DemoForm({ mode = 'inbox' }: { mode?: 'local' | 'inbox' }) {
   const [errors, setErrors] = useState<Errors>({});
   const [state, setState] = useState<State>({ kind: 'idle' });
+  const [slots, setSlots] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (mode !== 'local') return;
+    let live = true;
+    void fetch('/api/demo-request')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((body: { slots?: string[] } | null) => {
+        if (live) setSlots(body?.slots ?? []);
+      })
+      .catch(() => {
+        if (live) setSlots([]);
+      });
+    return () => {
+      live = false;
+    };
+  }, [mode]);
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
-    const parsed = demoRequestSchema.safeParse({
+    const parsed = (mode === 'local' ? demoBookingSchema : demoRequestSchema).safeParse({
       name: fd.get('name'),
       email: fd.get('email'),
       firm: fd.get('firm'),
       firmSize: fd.get('firmSize'),
       message: fd.get('message') || undefined,
       consent: fd.get('consent') === 'on',
+      ...(mode === 'local' ? { slotStart: fd.get('slotStart') } : {}),
     });
     if (!parsed.success) {
       const next: Errors = {};
@@ -59,13 +77,22 @@ export function DemoForm() {
   if (state.kind === 'ok') {
     return (
       <Alert tone="success">
-        The server accepted the request. That only happens when a demo inbox is configured.
+        {mode === 'local'
+          ? 'Saved on this computer. No email was sent and no calendar was written.'
+          : 'The server accepted the request. That only happens when a demo inbox is configured.'}
       </Alert>
     );
   }
 
   return (
-    <form onSubmit={onSubmit} noValidate className="space-y-4" aria-label="Book a demo">
+    <form
+      action="/api/demo-request"
+      method="post"
+      onSubmit={onSubmit}
+      noValidate
+      className="space-y-4"
+      aria-label="Book a demo"
+    >
       {state.kind === 'error' && <Alert tone="error">{state.message}</Alert>}
       <div className="grid gap-4 sm:grid-cols-2">
         <TextField
@@ -113,6 +140,22 @@ export function DemoForm() {
           ))}
         </SelectField>
       </div>
+      {mode === 'local' && (
+        <SelectField id="slotStart" name="slotStart" label="Open slot, India time" defaultValue="" error={errors.slotStart} required>
+          <option value="" disabled>
+            {slots.length ? 'Select…' : 'Slots are not loaded'}
+          </option>
+          {slots.map((slot) => (
+            <option key={slot} value={slot}>
+              {new Intl.DateTimeFormat('en-IN', {
+                timeZone: 'Asia/Kolkata',
+                dateStyle: 'medium',
+                timeStyle: 'short',
+              }).format(new Date(slot))}
+            </option>
+          ))}
+        </SelectField>
+      )}
       <TextAreaField
         id="message"
         name="message"
@@ -121,11 +164,11 @@ export function DemoForm() {
         error={errors.message}
       />
       <div>
-        <label className="flex items-start gap-2 text-sm text-navy-800">
+        <label className="flex min-h-11 items-center gap-2 text-sm text-navy-800">
           <input
             type="checkbox"
             name="consent"
-            className="mt-1"
+            className="size-5"
             aria-describedby={errors.consent ? 'consent-error' : undefined}
           />
           I agree to be contacted about this request.
@@ -137,7 +180,11 @@ export function DemoForm() {
         )}
       </div>
       <Button type="submit" size="lg" loading={state.kind === 'sending'}>
-        {state.kind === 'sending' ? 'Sending…' : 'Request a demo'}
+        {state.kind === 'sending'
+          ? 'Saving…'
+          : mode === 'local'
+            ? 'Save this slot on this computer'
+            : 'Request a demo'}
       </Button>
     </form>
   );

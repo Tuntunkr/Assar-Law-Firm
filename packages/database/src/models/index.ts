@@ -1196,6 +1196,9 @@ export interface InvoiceDoc {
   subtotalCents: number;
   taxRateBp: number;
   taxCents: number;
+  /** Set only after a person records an accountant review. Required before a taxed invoice can be issued. */
+  accountantReviewedAt?: Date | null;
+  accountantReviewedBy?: Id | null;
   totalCents: number;
   amountPaidCents: number;
   balanceCents: number;
@@ -1244,6 +1247,8 @@ const invoiceSchema = new Schema<InvoiceDoc>(
     subtotalCents: { type: Number, default: 0 },
     taxRateBp: { type: Number, default: 0, min: 0, max: 10000 },
     taxCents: { type: Number, default: 0 },
+    accountantReviewedAt: { type: Date, default: null },
+    accountantReviewedBy: { type: Schema.Types.ObjectId, default: null },
     totalCents: { type: Number, default: 0 },
     amountPaidCents: { type: Number, default: 0 },
     balanceCents: { type: Number, default: 0 },
@@ -1378,13 +1383,14 @@ export interface OutboxDoc {
     | 'rejected'
     | 'mock_delivered'
     | 'external_activation_gate'
+    | 'held_local'
     | 'accepted'
     | 'sent'
     | 'delivered'
     | 'read'
     | 'played'
     | 'failed';
-  provider: 'mock' | 'unconfigured' | 'whatsapp_cloud';
+  provider: 'mock' | 'unconfigured' | 'whatsapp_cloud' | 'local_mailbox' | 'smtp';
   attempts: number;
   providerMessageId?: string;
   providerError?: string | null;
@@ -1428,6 +1434,7 @@ const outboxSchema = new Schema<OutboxDoc>(
         'rejected',
         'mock_delivered',
         'external_activation_gate',
+        'held_local',
         'accepted',
         'sent',
         'delivered',
@@ -1439,7 +1446,7 @@ const outboxSchema = new Schema<OutboxDoc>(
     },
     provider: {
       type: String,
-      enum: ['mock', 'unconfigured', 'whatsapp_cloud'],
+      enum: ['mock', 'unconfigured', 'whatsapp_cloud', 'local_mailbox', 'smtp'],
       default: 'unconfigured',
     },
     attempts: { type: Number, default: 0 },
@@ -1457,3 +1464,152 @@ outboxSchema.index({ organizationId: 1, status: 1, _id: -1 });
 outboxSchema.index({ organizationId: 1, clientId: 1, matterId: 1, status: 1 });
 outboxSchema.index({ providerMessageId: 1 }, { unique: true, sparse: true });
 export const OutboxModel = define<OutboxDoc>('Outbox', outboxSchema);
+
+/** A cause-list row the firm imported. This server did not fetch it. */
+export interface CourtImportDoc {
+  _id: Id;
+  organizationId: Id;
+  sourceName: string;
+  externalId: string;
+  payloadHash: string;
+  courtName: string;
+  caseNumber: string;
+  title: string;
+  listedOn: string;
+  sourceUrl: string;
+  retrievedAt: Date;
+  status: 'stored' | 'stale' | 'error';
+  error: string | null;
+  importedBy: Id;
+  createdAt: Date;
+  updatedAt: Date;
+}
+const courtImportSchema = new Schema<CourtImportDoc>(
+  {
+    organizationId: { type: Schema.Types.ObjectId, required: true },
+    sourceName: { type: String, required: true, maxlength: 120 },
+    externalId: { type: String, required: true, maxlength: 80 },
+    payloadHash: { type: String, required: true, maxlength: 64 },
+    courtName: { type: String, required: true, maxlength: 200 },
+    caseNumber: { type: String, required: true, maxlength: 100 },
+    title: { type: String, required: true, maxlength: 200 },
+    listedOn: { type: String, required: true, maxlength: 10 },
+    sourceUrl: { type: String, required: true, maxlength: 500 },
+    retrievedAt: { type: Date, required: true },
+    status: { type: String, enum: ['stored', 'stale', 'error'], required: true },
+    error: { type: String, maxlength: 300, default: null },
+    importedBy: { type: Schema.Types.ObjectId, required: true },
+  },
+  { timestamps: true },
+);
+courtImportSchema.index({ organizationId: 1, sourceName: 1, externalId: 1 }, { unique: true });
+export const CourtImportModel = define<CourtImportDoc>('CourtImport', courtImportSchema);
+
+/** An approved email kept on this machine. Nothing was handed to an SMTP server. */
+export interface LocalMailboxDoc {
+  _id: Id;
+  organizationId: Id;
+  outboxId: Id;
+  to: string;
+  subject: string;
+  body: string;
+  status: 'held_local';
+  createdAt: Date;
+  updatedAt: Date;
+}
+const localMailboxSchema = new Schema<LocalMailboxDoc>(
+  {
+    organizationId: { type: Schema.Types.ObjectId, required: true },
+    outboxId: { type: Schema.Types.ObjectId, required: true },
+    to: { type: String, required: true, maxlength: 254 },
+    subject: { type: String, required: true, maxlength: 200 },
+    body: { type: String, required: true, maxlength: 5000 },
+    status: { type: String, enum: ['held_local'], default: 'held_local' },
+  },
+  { timestamps: true },
+);
+localMailboxSchema.index({ organizationId: 1, outboxId: 1 }, { unique: true });
+export const LocalMailboxModel = define<LocalMailboxDoc>('LocalMailbox', localMailboxSchema);
+
+/** A synthetic demo booking. No calendar provider is called. */
+export interface DemoBookingDoc {
+  _id: Id;
+  name: string;
+  email: string;
+  firm: string;
+  firmSize: string;
+  message: string | null;
+  slotStart: Date;
+  status: 'recorded_local';
+  notification: 'not_sent';
+  createdAt: Date;
+  updatedAt: Date;
+}
+const demoBookingSchema = new Schema<DemoBookingDoc>(
+  {
+    name: { type: String, required: true, maxlength: 100 },
+    email: { type: String, required: true, maxlength: 254 },
+    firm: { type: String, required: true, maxlength: 150 },
+    firmSize: { type: String, required: true, maxlength: 20 },
+    message: { type: String, maxlength: 2000, default: null },
+    slotStart: { type: Date, required: true },
+    status: { type: String, enum: ['recorded_local'], default: 'recorded_local' },
+    notification: { type: String, enum: ['not_sent'], default: 'not_sent' },
+  },
+  { timestamps: true },
+);
+demoBookingSchema.index({ slotStart: 1 }, { unique: true });
+export const DemoBookingModel = define<DemoBookingDoc>('DemoBooking', demoBookingSchema);
+
+/**
+ * A versioned draft of a court form. `legally_approved` means a person with form:approve
+ * signed the declaration. It is not a bar-license check and not an AI decision.
+ */
+export interface CourtFormDoc {
+  _id: Id;
+  organizationId: Id;
+  title: string;
+  jurisdiction: string;
+  caseType: string;
+  body: string;
+  officialSourceTitle: string;
+  officialSourceUrl: string;
+  sourceRetrievedOn: string;
+  version: number;
+  status: 'draft' | 'legally_approved' | 'rejected';
+  advocateDeclaration: boolean;
+  signoffNote: string | null;
+  decidedBy: Id | null;
+  decidedAt: Date | null;
+  licenseCheck: 'not_performed';
+  createdBy: Id;
+  createdAt: Date;
+  updatedAt: Date;
+}
+const courtFormSchema = new Schema<CourtFormDoc>(
+  {
+    organizationId: { type: Schema.Types.ObjectId, required: true },
+    title: { type: String, required: true, maxlength: 200 },
+    jurisdiction: { type: String, required: true, maxlength: 150, default: 'unknown' },
+    caseType: { type: String, required: true, maxlength: 150, default: 'unknown' },
+    body: { type: String, required: true, maxlength: 50_000 },
+    officialSourceTitle: { type: String, required: true, maxlength: 200 },
+    officialSourceUrl: { type: String, required: true, maxlength: 500 },
+    sourceRetrievedOn: { type: String, required: true, maxlength: 10 },
+    version: { type: Number, default: 1 },
+    status: {
+      type: String,
+      enum: ['draft', 'legally_approved', 'rejected'],
+      default: 'draft',
+    },
+    advocateDeclaration: { type: Boolean, default: false },
+    signoffNote: { type: String, maxlength: 2000, default: null },
+    decidedBy: { type: Schema.Types.ObjectId, default: null },
+    decidedAt: { type: Date, default: null },
+    licenseCheck: { type: String, enum: ['not_performed'], default: 'not_performed' },
+    createdBy: { type: Schema.Types.ObjectId, required: true },
+  },
+  { timestamps: true },
+);
+courtFormSchema.index({ organizationId: 1, _id: -1 });
+export const CourtFormModel = define<CourtFormDoc>('CourtForm', courtFormSchema);

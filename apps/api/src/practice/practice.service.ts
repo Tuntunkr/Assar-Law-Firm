@@ -3,6 +3,7 @@ import {
   clients,
   deadlines,
   dispatchPracticeReminders,
+  localMailbox,
   outbox,
   type DeadlineDoc,
   type OutboxDoc,
@@ -255,6 +256,9 @@ export class PracticeService {
       return outboxDto(row);
     }
     await this.assertWhatsAppAllowed(auth.organizationId, current);
+    if (current.channel === 'email' && this.env.EMAIL_DELIVERY !== 'off') {
+      return this.deliverEmail(auth, current, req);
+    }
     if (this.env.MESSAGE_PROVIDER === 'whatsapp_cloud' && current.channel === 'whatsapp') {
       return this.deliverWhatsApp(auth, current, req);
     }
@@ -331,6 +335,63 @@ export class PracticeService {
       throw new ApiError(409, 'CONFLICT', 'Only a mock delivery can be acknowledged');
     await outbox.update(organizationId, outboxId, { $addToSet: { webhookEventIds: eventId } });
     return { replayed: false, status: row.status };
+  }
+
+  /** Local mailbox or a closed SMTP gate. This method does not open a network socket. */
+  private async deliverEmail(auth: AuthContext, current: OutboxDoc, req: Req) {
+    if (this.env.EMAIL_DELIVERY === 'smtp') {
+      const row = await outbox.update(auth.organizationId, String(current._id), {
+        status: 'external_activation_gate',
+        provider: 'smtp',
+        providerError: 'smtp_send_not_enabled',
+        attempts: 0,
+        approvedBy: auth.userId,
+        approvedAt: new Date(),
+      });
+      if (!row) throw new ApiError(404, 'NOT_FOUND', 'Preview not found');
+      await this.audit.record({
+        organizationId: auth.organizationId,
+        actorId: auth.userId,
+        action: 'outbox.approved',
+        targetType: 'outbox',
+        targetId: String(current._id),
+        req,
+        meta: { status: row.status, provider: row.provider },
+      });
+      return outboxDto(row);
+    }
+    const client = await clients.findById(auth.organizationId, String(current.clientId));
+    if (!client?.email)
+      throw new ApiError(400, 'VALIDATION_FAILED', 'The client needs an email address before a local copy can be kept.');
+    const existing = await localMailbox.findByOutbox(auth.organizationId, String(current._id));
+    if (!existing) {
+      await localMailbox.create({
+        organizationId: auth.organizationId,
+        outboxId: String(current._id),
+        to: client.email,
+        subject: current.templateLabel,
+        body: current.body,
+      });
+    }
+    const row = await outbox.update(auth.organizationId, String(current._id), {
+      status: 'held_local',
+      provider: 'local_mailbox',
+      attempts: 1,
+      providerError: null,
+      approvedBy: auth.userId,
+      approvedAt: new Date(),
+    });
+    if (!row) throw new ApiError(404, 'NOT_FOUND', 'Preview not found');
+    await this.audit.record({
+      organizationId: auth.organizationId,
+      actorId: auth.userId,
+      action: 'outbox.approved',
+      targetType: 'outbox',
+      targetId: String(current._id),
+      req,
+      meta: { status: row.status, provider: row.provider },
+    });
+    return outboxDto(row);
   }
 
   private async assertWhatsAppAllowed(organizationId: string, row: OutboxDoc) {

@@ -33,7 +33,8 @@ const capabilities = [
 ];
 
 export default function HomePage() {
-  const demoConfigured = Boolean(process.env.DEMO_REQUEST_ENDPOINT);
+  const demoLocal = process.env.DEMO_BOOKING === 'local';
+  const demoConfigured = demoLocal || Boolean(process.env.DEMO_REQUEST_ENDPOINT);
   return (
     <>
       <Container className="grid items-center gap-12 py-16 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] lg:py-24">
@@ -152,14 +153,16 @@ export default function HomePage() {
         eyebrow="Demo"
         title="Ask about a demo"
         intro={
-          demoConfigured
-            ? 'The form is sent to the inbox the firm has configured. It does not open a matter or a filing.'
-            : 'Demo booking is not configured. The form is hidden so a name and an email are not collected into nowhere.'
+          demoLocal
+            ? 'The form is saved on this computer. No email is sent and no calendar is written.'
+            : demoConfigured
+              ? 'The form is sent to the inbox the firm has configured. It does not open a matter or a filing.'
+              : 'Demo booking is not configured. The form is hidden so a name and an email are not collected into nowhere.'
         }
       >
         <div className="max-w-2xl">
           {demoConfigured ? (
-            <DemoForm />
+            <DemoForm mode={demoLocal ? 'local' : 'inbox'} />
           ) : (
             <div className="rounded-xl border border-navy-200 bg-white p-6" role="status">
               <h3 className="text-lg font-semibold text-navy-950">
