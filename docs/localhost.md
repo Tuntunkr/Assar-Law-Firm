@@ -49,7 +49,18 @@ If ports 3000, 3001, 3002, 4000, or 4100 are taken, `start` exits and names the 
 
 A firm named Synthetic Preview LLP. An owner and a billing user who need an authenticator code. An attorney, a paralegal, a staff user, and an intern who use the shared password and do not need a code. A synthetic client, a matter with a 16-character CNR `SYNTHETICPREVIEW`, a typed date, a hearing, an unsent email preview, a zero-tax invoice draft, and a portal user. Nothing is a real case.
 
-Court import is on, and it still does not fetch a court. Email delivery is local: an approved email is stored in this database and is not a portal release. Demo booking is local: a slot can be saved and is not emailed or calendared. The message provider in this demo is `mock`, so an approved WhatsApp-channel preview is marked `mock_delivered` and no socket is opened. It is not Meta. Workflows and AI stay off. Scanning is disabled in this development demo, so a file is marked `skipped`, not `clean`. The portal can receive a file only after a real scanner marks it clean. Production refuses the disabled scanner.
+Court import is on, and it still does not fetch a court. Email delivery is local: an approved email is stored in this database and is not a portal release. Demo booking is local: a slot can be saved and is not emailed or calendared. The message provider in this demo is `mock`, so an approved WhatsApp-channel preview is marked `mock_delivered` and no socket is opened. It is not Meta. Workflows and AI stay off.
+
+`start` writes `SCAN_PROVIDER=clamav` with `CLAMAV_HOST=127.0.0.1` and `CLAMAV_PORT=3310`. A file can be shared with the portal only after ClamAV marks that version clean. If nothing is listening on that port, the version fails closed and is not marked clean. This cloud worker has ClamAV 1.5.4, started by hand because `policy-rc.d` denied systemd. The owner’s computer needs the same daemon before a portal share will succeed:
+
+```bash
+sudo freshclam
+# append to /etc/clamav/clamd.conf: TCPSocket 3310 and TCPAddr 127.0.0.1
+sudo mkdir -p /var/run/clamav && sudo chown clamav:clamav /var/run/clamav
+sudo -u clamav clamd --config-file=/etc/clamav/clamd.conf
+```
+
+A hand-started daemon does not come back after reboot. Production still refuses `SCAN_PROVIDER=disabled`.
 
 ## Payment gateway
 

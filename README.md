@@ -53,7 +53,7 @@ bash scripts/local-demo.sh status
 bash scripts/local-demo.sh stop
 ```
 
-Login material is written only to `.data/demo-login.txt`. See [docs/localhost.md](docs/localhost.md). That path is this computer, not a production host.
+Login material is written only to `.data/demo-login.txt`. See [docs/localhost.md](docs/localhost.md). That path is this computer, not a production host. Portal sharing needs ClamAV listening on `127.0.0.1:3310`. Without it, a new upload fails closed.
 
 | App | Default URL |
 | --- | ----------- |

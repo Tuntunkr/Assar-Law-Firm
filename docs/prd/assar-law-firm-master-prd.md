@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document id | ASSAR-PRD-2026-11-08 |
-| Version | 1.0.3 |
+| Version | 1.0.4 |
 | Cutoff | 8 Nov 2026, 10:23 IST. Later notes in this file are labelled with the clock time they were verified on this worker. |
 | Owner | Tuntunkr |
 | Repository | Tuntunkr/Assar-Law-Firm |
@@ -121,7 +121,7 @@ The demo that this pass owns is:
 
 App passwords are argon2id (`$argon2id$` on `users.passwordHash`). That is application login. It is not MongoDB server authentication. The `admin` database on this mongod has no users.
 
-`scripts/run-journey.mjs` drove the live API and exited 0. One matter went through intake, a human conflict check, team and opposing party, a private text upload, staff download of the same bytes, hearing outcome draft, paralegal review denied, attorney review, a typed next date, deadline draft, paralegal approval denied, attorney approval, an intern task, the intern’s own task update, the intern’s 404 on the other matter, a local email held on this computer, a mock WhatsApp-channel update with no socket, portal publish, an 18% draft blocked until the billing user recorded accountant review, issue, a manual bank transfer, and the portal user seeing only their matter, the paid invoice, and the mock update. The portal document list stayed empty. Sharing the unscanned file returned 409, “Only versions that passed the security scan can be shared.” The file status is `skipped`, not `clean`. Staff can download it. The portal cannot, until a real scanner marks it clean. This pass did not mark `skipped` as `clean`.
+`scripts/run-journey.mjs` drove the live API and exited 0. One matter went through intake, a human conflict check, team and opposing party, a private text upload, staff download of the same bytes, hearing outcome draft, paralegal review denied, attorney review, a typed next date, deadline draft, paralegal approval denied, attorney approval, an intern task, the intern’s own task update, the intern’s 404 on the other matter, a local email held on this computer, a mock WhatsApp-channel update with no socket, portal publish, an 18% draft blocked until the billing user recorded accountant review, issue, a manual bank transfer, and the portal user seeing only their matter, the paid invoice, and the mock update. The portal document list stayed empty. Sharing the unscanned file returned 409, “Only versions that passed the security scan can be shared.” The file status is `skipped`, not `clean`. Staff can download it. The portal cannot receive that version until a real scanner marks it clean. This pass did not mark `skipped` as `clean`. Section 4.3 later scanned a different file with ClamAV on this worker. That older file is still unshared.
 
 The same records were opened in the staff and portal screens: matter overview with CNR `SYNTHETICJOURNEY`, the documents tab, the matter tasks tab, December’s calendar row for the hearing, the dates list, client updates, the intern’s task list, the intern’s denial, the billing invoice in INR, the portal list, the portal matter, and the other client’s matter. Console error lists for those sessions were empty. Screenshots are under `/opt/cursor/artifacts/journey-*.png`.
 
@@ -131,7 +131,39 @@ Stopping only the mongod whose `--dbpath` was `/workspace/.data/demo-mongo` made
 
 Fresh production build, cache bypassed: `pnpm exec turbo run build --force --filter=@assar/api --filter=@assar/dashboard --filter=@assar/client-portal --filter=@assar/web`. Exit 0. 11 tasks, 0 cached. The dashboard build warned that one chunk is larger than 500 kB. `@assar/ui` build is a typecheck with no emit, so Turbo warned that the task has no output files. Neither warning is a failed build.
 
-Still missing after this pass: owner-machine run, owner UAT, merge, deploy, a pull request, a restored backup, a real scanner so the portal can receive the file, a payment gateway, live court, live WhatsApp, SMTP, and production n8n. The attorney matter screen shows the lead attorney as “Unknown” because that role cannot list members. The id is stored. Repeated journey runs left extra synthetic rows in `assar_demo`. `bash scripts/local-demo.sh reset` drops only that database. It was not run after the persistence check, so the extra rows are still there.
+Still missing after the journey in this section: owner-machine run, owner UAT, merge, deploy, a pull request, a restored backup, a payment gateway, live court, live WhatsApp, SMTP, and production n8n. Repeated journey runs left extra synthetic rows in `assar_demo`. `bash scripts/local-demo.sh reset` drops only that database. It was not run after the persistence check, so the extra rows are still there. The lead-attorney label and the portal file were closed later, on this same worker, in section 4.3. They were open when this section was written.
+
+### 4.3 Names and a local scanner, 8 Nov 2026
+
+The implementation commit is `259a565b037366595856566b4d845fc4f39b9bc7`. This is still the cloud worker, not the owner’s computer, and not owner UAT.
+
+A matter the caller can already read now includes `leadAttorneyName` and `teams` as `{ id, name }`. A task the caller can already read includes `assigneeName`. The names come from active memberships of that same organization. A user id from another firm is omitted. The payload has no email and no team roster. `GET /v1/organization/members` stays `user:manage`. On the live demo, the attorney and the intern both received 403 from that route. The attorney’s matter page showed “Preview attorney” as the lead. The intern’s task list showed “Preview intern” on “Journey filing bundle.” The intern’s other matter stayed 404. The journey matter has no team, so its team list is empty. The API test covers a team name on a matter the caller can read.
+
+ClamAV 1.5.4 is installed on this worker only. `freshclam` wrote daily.cvd 28176, main.cvd 63, and bytecode.cvd 339. systemd was denied by `policy-rc.d`, so the daemon was started by hand:
+
+```bash
+sudo freshclam
+# append to /etc/clamav/clamd.conf
+# TCPSocket 3310
+# TCPAddr 127.0.0.1
+sudo mkdir -p /var/run/clamav && sudo chown clamav:clamav /var/run/clamav
+sudo -u clamav clamd --config-file=/etc/clamav/clamd.conf
+```
+
+That process does not survive a reboot of this worker unless it is started again. The owner’s computer does not have this daemon just because this worker does. `scripts/local-demo.sh` now writes `SCAN_PROVIDER=clamav`, `CLAMAV_HOST=127.0.0.1`, and `CLAMAV_PORT=3310`. If nothing is listening, a new upload stays failed closed. It is not marked clean.
+
+`node scripts/run-scan-check.mjs` exited 0 against the live API. The older journey file stayed `skipped` and its share stayed 409. A new 38-byte text file, “synthetic scanned note for the portal,” reached status `clean` and `scanResult` `clean`. The stored row has `scan.engine` `clamav`. The attorney shared it. The portal listed “Scanned portal note,” downloaded the same 38 bytes, and did not list the private note or the EICAR file. The EICAR test file reached status `infected` and `scanResult` `Eicar-Test-Signature`, and its share stayed 409. The script was run twice, so the portal shows two copies of that note. No scan status was written by hand. The fake ClamAV listener remains inside API tests only.
+
+This pass’s checks, separate from the earlier API run of 300 passed and 6 skipped:
+
+- `pnpm exec turbo run typecheck lint --force` for `@assar/api`, `@assar/api-client`, `@assar/dashboard`, and `@assar/database`. Exit 0. 15 tasks, 0 cached. Turbo warned that `@assar/ui` build emits no files.
+- `pnpm --filter @assar/api exec vitest run test/matter-identity.test.ts test/matters.test.ts test/tasks.test.ts`. Exit 0. 3 files, 26 tests: 1 new identity test, 16 matter tests, 9 task tests. About 9.3 seconds.
+- `pnpm --filter @assar/dashboard exec vitest run`. Exit 0. 3 files, 38 tests. About 8.5 seconds.
+- `pnpm exec turbo run build --force` for `@assar/api`, `@assar/dashboard`, and `@assar/client-portal`. Exit 0. 10 tasks, 0 cached. Same `@assar/ui` warning. The marketing app was not rebuilt in this pass.
+
+Staff and portal nav links on the recaptured screens were at least 44px. Portal Tab landed on “Skip to content” at about 137×44. The portal at 390px had scroll width 390. No video.
+
+Still open after this section: the owner’s machine, owner UAT, merge, deploy, a pull request, a restored backup, a payment gateway, live court, live WhatsApp, SMTP, and production n8n. MongoDB on 27119 still has no server user. Application argon2id is not database authentication. Extra synthetic rows remain, including the repeated tasks and the second scanned note. WIMO marketing was not touched.
 
 ## 5. Users and the permission map
 
@@ -693,7 +725,7 @@ US accounting exports are not Indian tax compliance. Other names from the 7 Nov 
 | 18 | Deadline edit after approval | Needs approval again | REQUIREMENT. Confirm in the next test pass; not re-run here. |
 | 19 | No route computes a limitation period | Absent | BRANCH-IMPLEMENTED by absence. Not a certificate. |
 | 20 | Upload executable type or a path-like name | 400, name sanitised | Cloud journey rejected the executable with 400. Path sanitising was the section 4.1 check, not repeated as a second file. |
-| 21 | Scanner cannot run | Not marked clean | Cloud journey status `skipped`. Portal share 409. Not marked clean. |
+| 21 | Scanner cannot run | Not marked clean | Section 4.2 file stayed `skipped` and unshared. Section 4.3 used ClamAV on this worker: a new text file became `clean` and was shared; EICAR stayed `infected` and unshared. A missing daemon still fails closed. |
 | 22 | Signed download for another object | Rejected | REQUIREMENT. Not re-run as a dedicated case in this pass. |
 | 23 | Intern sees only the assigned matter | Other matter 404 | Cloud journey API 404 and the staff screen “you do not have access.” |
 | 24 | Intern revoked | Access gone | REQUIREMENT. Not re-run here. |
@@ -716,7 +748,7 @@ US accounting exports are not Indian tax compliance. Other names from the 7 Nov 
 | 41 | Court form signoff by paralegal, service token, attorney | 403, 401, then `legally_approved` with `licenseCheck` `not_performed` | Working-tree pass. |
 | 42 | Cold start, `/readyz` when Mongo is down, then up | 503 then 200 | Section 4.2, owned mongod only. 503 `mongodb: failing`, then 200. |
 | 43 | Restart mongod and read the same synthetic document | Still present | Section 4.2. Journey matter and 23-byte file survived. Foreign `/tmp/mongo-data` was not restarted. |
-| 44 | Full browser journey: intake, matter, private file, hearing, deadline, intern denial, mock message, INR invoice, manual payment, portal | Each step on one running stack | Cloud-local pass, section 4.2. Portal file remains blocked until a scan is `clean`. Not owner UAT. |
+| 44 | Full browser journey: intake, matter, private file, hearing, deadline, intern denial, mock message, INR invoice, manual payment, portal | Each step on one running stack | Cloud-local pass, section 4.2, plus the name and scanned-file screens in section 4.3. The original upload stays unshared. A later ClamAV-clean file is on the portal. Not owner UAT. |
 | 45 | Owner UAT | Signed by the owner | NOT-RUN. |
 | 46 | Restore a backup and verify | Counts match | NOT-RUN. Script exists only. |
 | 47 | Payment gateway charge | Must not exist | Confirmed absent. Deferred. |
@@ -726,11 +758,11 @@ Rows 1–48 are the matrix. Historical passes are not a pass of every row.
 
 ## 15. Local handoff
 
-The owner’s computer was offline. Anything running in this cloud worker is not that computer. The owner runs the stack later. Version 1.0 of this section had not executed `scripts/local-demo.sh`. Section 4.2 did, on this worker only, against `/workspace/.data/demo-mongo` and port 27119.
+The owner’s computer was offline. Anything running in this cloud worker is not that computer. The owner runs the stack later. Version 1.0 of this section had not executed `scripts/local-demo.sh`. Section 4.2 did, on this worker only, against `/workspace/.data/demo-mongo` and port 27119. Section 4.3 added names and a ClamAV scan on that same worker. MongoDB there still has no server authentication.
 
 ### 15.1 What the owner’s machine needs
 
-- Node 22 or newer, pnpm 9.11.0, a local MongoDB 7 that can be a replica set, Redis 7.
+- Node 22 or newer, pnpm 9.11.0, a local MongoDB 7 that can be a replica set, Redis 7, and ClamAV listening on `127.0.0.1:3310`. The commands are in `docs/localhost.md`. This worker has that daemon. A machine without it fails a new upload closed.
 - No production secrets. Demo mode stays `NODE_ENV=development`. Production auth checks are not disabled.
 - App ports: marketing 3000, dashboard 3001, portal 3002, API 4000, worker health 4100. Mongo and Redis are 27117 and 6380 only when those ports are free or already serving this demo’s directories `.data/mongo` and `.data/redis`. If another program owns the port, the script leaves it running and uses `.data/demo-mongo` on the first free port in 27119–27122, and `.data/redis` on the first free port in 6382–6384. Read `.data/demo-services.env` for the ports actually chosen. `mongod` must be on PATH, or the script prints the binary it found and exits if it finds none.
 - Health: `GET /healthz` is liveness. `GET /readyz` checks Mongo and Redis. A dependency that is down is a failed ready check, not a hidden success.
@@ -800,6 +832,7 @@ This PRD does not authorise new application behaviour. Implementation continues 
 | 1.0.1 | 8 Nov 2026 | Correct the closed-decision line that said WIMO and its marketing site were paused. Only WIMO development is paused. Existing WIMO marketing routines remain untouched and are not paused. No WIMO file was changed. |
 | 1.0.2 | 8 Nov 2026 | Record the cloud-localhost checks from the continuation. Not owner UAT. Not a security or legal certificate. The code commit is named in section 4.1. |
 | 1.0.3 | 8 Nov 2026 | Record the connected cloud-local journey, the 44px staff and portal measurements, the owned data directories, and the fresh production build. Implementation commit `b98c20a37d24c7f47b7cefb54f980dd82089e905`. Not owner UAT. Not a security or legal certificate. |
+| 1.0.4 | 8 Nov 2026 | Record matter and task names without a member directory, and a ClamAV scan on this worker only. Implementation commit `259a565b037366595856566b4d845fc4f39b9bc7`. The earlier 300 passed and 6 skipped API run was not repeated. Not owner UAT. Not a security or legal certificate. |
 
 ## 19. Provenance
 
