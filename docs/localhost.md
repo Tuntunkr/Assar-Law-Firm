@@ -21,10 +21,14 @@ No production secret is required. `NODE_ENV` stays `development`. Production aut
 | Client portal | http://127.0.0.1:3002 |
 | API | http://127.0.0.1:4000 |
 | Worker health | http://127.0.0.1:4100/healthz |
-| MongoDB | `mongodb://127.0.0.1:27117/assar_demo?replicaSet=rs0` |
-| Redis | `redis://127.0.0.1:6380` |
+| MongoDB | `127.0.0.1:27117` and `./.data/mongo` when that port is free, or already serving that directory. If another MongoDB owns 27117, it is left running and this demo uses `./.data/demo-mongo` on the first free port from 27119 to 27122 |
+| Redis | `127.0.0.1:6380` and `./.data/redis` when that port is free, or the process working directory is already `./.data/redis`. Otherwise the first free port from 6382 to 6384, same directory |
 
-`GET /healthz` is liveness. `GET /readyz` fails when Mongo or Redis is down. That failure is the ready check working.
+`GET /healthz` is liveness. `GET /readyz` fails when Mongo or Redis is down. The body is `{"status":"not_ready","checks":{"mongodb":"...","redis":"..."}}`. That failure is the ready check working.
+
+The script writes the chosen ports to `.data/demo-services.env`. Read that file before assuming 27117 or 6380. `mongod` has to be on `PATH`. If it is not, the script prints the binary it found, and it exits if it finds none. Redis may drop `--dir` from its command line. The script treats the process working directory as the owned path.
+
+Application users and MongoDB server users are different. Demo passwords are argon2id. This demo mongod is started with no `--auth` and no user database. Argon2 does not harden the database server.
 
 Open the dashboard and the portal on `127.0.0.1` when `VITE_API_URL` is `http://127.0.0.1:4000`. A page on `localhost` does not send a cookie that the API set for `127.0.0.1`.
 
@@ -37,7 +41,7 @@ bash scripts/local-demo.sh reset
 bash scripts/local-demo.sh stop
 ```
 
-`start` brings up Mongo and Redis if they are not already running, builds the API, seeds a synthetic firm once, then restarts the API with registration off. The seed writes `.data/demo-login.txt` and does not print the password. `reset` drops only the `assar_demo` database. `stop` stops the demo apps and leaves Mongo and Redis running. `bash scripts/dev-services.sh stop` stops those two as well.
+`start` builds the API, seeds a synthetic firm once, then restarts the API with registration off. A later `start`, when `.data/demo-login.txt` is already present, does not seed again. The seed writes `.data/demo-login.txt` and does not print the password. `reset` drops only the `assar_demo` database on the URI in `.data/demo.env`. `stop` stops the demo apps and stops a MongoDB or Redis only when `.data/demo-services.env` says this demo started it and the process still points at the recorded directory. Another machine’s database is not stopped.
 
 If ports 3000, 3001, 3002, 4000, or 4100 are taken, `start` exits and names the port. It does not kill another program for you.
 
@@ -45,7 +49,7 @@ If ports 3000, 3001, 3002, 4000, or 4100 are taken, `start` exits and names the 
 
 A firm named Synthetic Preview LLP. An owner and a billing user who need an authenticator code. An attorney, a paralegal, a staff user, and an intern who use the shared password and do not need a code. A synthetic client, a matter with a 16-character CNR `SYNTHETICPREVIEW`, a typed date, a hearing, an unsent email preview, a zero-tax invoice draft, and a portal user. Nothing is a real case.
 
-Court import is on, and it still does not fetch a court. Email delivery is local: an approved email is stored in this database. Demo booking is local: a slot can be saved and is not emailed or calendared. The message provider stays unconfigured. Workflows and AI stay off. Scanning is disabled in this development demo, so a file is not marked clean. Production refuses that setting.
+Court import is on, and it still does not fetch a court. Email delivery is local: an approved email is stored in this database and is not a portal release. Demo booking is local: a slot can be saved and is not emailed or calendared. The message provider in this demo is `mock`, so an approved WhatsApp-channel preview is marked `mock_delivered` and no socket is opened. It is not Meta. Workflows and AI stay off. Scanning is disabled in this development demo, so a file is marked `skipped`, not `clean`. The portal can receive a file only after a real scanner marks it clean. Production refuses the disabled scanner.
 
 ## Payment gateway
 

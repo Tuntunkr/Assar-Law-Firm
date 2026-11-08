@@ -32,7 +32,7 @@ docs/                 Architecture, API notes, runbooks
 
 - Node.js **22+**
 - [pnpm](https://pnpm.io/) **9.x**
-- MongoDB as a replica set, and Redis. The local script uses `127.0.0.1:27117` and `127.0.0.1:6380`. S3 is for production storage. Local demo files stay on disk.
+- MongoDB as a replica set, and Redis. `scripts/dev-services.sh` uses `127.0.0.1:27117` and `127.0.0.1:6380` only for directories it owns. `scripts/local-demo.sh` leaves a foreign server running and records the ports it actually opened in `.data/demo-services.env`. S3 is for production storage. Local demo files stay on disk.
 
 ## Quick start
 

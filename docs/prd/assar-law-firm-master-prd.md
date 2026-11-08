@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document id | ASSAR-PRD-2026-11-08 |
-| Version | 1.0 |
+| Version | 1.0.3 |
 | Cutoff | 8 Nov 2026, 10:23 IST. Later notes in this file are labelled with the clock time they were verified on this worker. |
 | Owner | Tuntunkr |
 | Repository | Tuntunkr/Assar-Law-Firm |
@@ -104,6 +104,34 @@ On 8 Nov 2026, after version 1.0.1, the uncommitted continuation was booted here
 - Browser, headless Chrome, console empty: home, services, solutions, pricing, and contact at 1440 and 390. No horizontal overflow. Contact offered local slots. The mobile menu opened. Focused skip link measured about 138×44. Unfocused, it is clipped. Reduced motion set the eyebrow animation name to `none`; the normal name was `rise`. A screen recording was saved and was not reviewed, because the video reviewer could not be started. Computed style is the motion evidence.
 - Dashboard matters, updates, and invoices were opened as the owner. The portal at 390 showed the synthetic matter for the portal user. Staff sidebar links measured about 36px tall. That is not a 44px pass for the dashboard.
 - No payment gateway, no live court, no live WhatsApp, no SMTP send, no merge, and no deploy.
+
+### 4.2 Connected journey on the isolated demo, 8 Nov 2026
+
+The implementation commit is `b98c20a37d24c7f47b7cefb54f980dd82089e905`. Section 4.1 used the MongoDB already listening on port 27117, data directory `/tmp/mongo-data`. That server is not this demo’s directory. This pass did not stop it, drop it, or change its configuration. `mongod` is not on this shell’s PATH. The script printed the binary it used: `/tmp/mongodb-linux-x86_64-ubuntu2204-7.0.14/bin/mongod`.
+
+The demo that this pass owns is:
+
+| Piece | Actual path or port |
+| --- | --- |
+| MongoDB | `/workspace/.data/demo-mongo` on `127.0.0.1:27119`, replica set `rs0`, no server user and no auth |
+| Redis | `/workspace/.data/redis` on `127.0.0.1:6382`. The process working directory is that folder. Redis removes `--dir` from its command line, so ownership is the working directory, not the command text |
+| Files | `/workspace/.data/storage` |
+| Left running, not owned | MongoDB pid on `/tmp/mongo-data` port 27117, and Redis on 6380 whose working directory is `/tmp` |
+| App ports | Marketing 3000, staff 3001, portal 3002, API 4000, worker health 4100 |
+
+App passwords are argon2id (`$argon2id$` on `users.passwordHash`). That is application login. It is not MongoDB server authentication. The `admin` database on this mongod has no users.
+
+`scripts/run-journey.mjs` drove the live API and exited 0. One matter went through intake, a human conflict check, team and opposing party, a private text upload, staff download of the same bytes, hearing outcome draft, paralegal review denied, attorney review, a typed next date, deadline draft, paralegal approval denied, attorney approval, an intern task, the intern’s own task update, the intern’s 404 on the other matter, a local email held on this computer, a mock WhatsApp-channel update with no socket, portal publish, an 18% draft blocked until the billing user recorded accountant review, issue, a manual bank transfer, and the portal user seeing only their matter, the paid invoice, and the mock update. The portal document list stayed empty. Sharing the unscanned file returned 409, “Only versions that passed the security scan can be shared.” The file status is `skipped`, not `clean`. Staff can download it. The portal cannot, until a real scanner marks it clean. This pass did not mark `skipped` as `clean`.
+
+The same records were opened in the staff and portal screens: matter overview with CNR `SYNTHETICJOURNEY`, the documents tab, the matter tasks tab, December’s calendar row for the hearing, the dates list, client updates, the intern’s task list, the intern’s denial, the billing invoice in INR, the portal list, the portal matter, and the other client’s matter. Console error lists for those sessions were empty. Screenshots are under `/opt/cursor/artifacts/journey-*.png`.
+
+Staff sidebar links measured 44px tall. The skip link, after the page was focused and Tab was pressed, measured about 137×44. A later Tab landed on Clients at 44px with a solid 2px outline. Portal skip and nav links were also at least 44px. At 390px the document scroll width matched the viewport on the matter, intern tasks, portal matter, and, after the table wrapper was marked `relative`, the invoice. Reduced motion set nav `transition-duration` to `0.01ms` and `animation-name` to `none`. No video is part of this evidence.
+
+Stopping only the mongod whose `--dbpath` was `/workspace/.data/demo-mongo` made `GET /readyz` return 503 `{"status":"not_ready","checks":{"mongodb":"failing","redis":"ok"}}`. Starting that same directory on 27119 again returned the journey matter and the 23-byte file. `bash scripts/local-demo.sh stop` then `start` left the foreign MongoDB and Redis running, started the owned directories again, did not reseed, kept registration at 403 “Registration is disabled,” and the journey matter was still `portalVisible`.
+
+Fresh production build, cache bypassed: `pnpm exec turbo run build --force --filter=@assar/api --filter=@assar/dashboard --filter=@assar/client-portal --filter=@assar/web`. Exit 0. 11 tasks, 0 cached. The dashboard build warned that one chunk is larger than 500 kB. `@assar/ui` build is a typecheck with no emit, so Turbo warned that the task has no output files. Neither warning is a failed build.
+
+Still missing after this pass: owner-machine run, owner UAT, merge, deploy, a pull request, a restored backup, a real scanner so the portal can receive the file, a payment gateway, live court, live WhatsApp, SMTP, and production n8n. The attorney matter screen shows the lead attorney as “Unknown” because that role cannot list members. The id is stored. Repeated journey runs left extra synthetic rows in `assar_demo`. `bash scripts/local-demo.sh reset` drops only that database. It was not run after the persistence check, so the extra rows are still there.
 
 ## 5. Users and the permission map
 
@@ -659,36 +687,36 @@ US accounting exports are not Indian tax compliance. Other names from the 7 Nov 
 | 12 | Change the payload without retry | `conflict` | Working-tree pass. |
 | 13 | `retrievedAt` older than 7 days | `stale` | Working-tree pass. |
 | 14 | Operator object in `externalId` | 400 | Working-tree pass. |
-| 15 | Hearing outcome by a paralegal, review by an attorney | Draft, then reviewed | Historical. Not re-run. |
-| 16 | Schedule next | One manual hearing at the chosen IST instant | Historical. Not re-run. |
-| 17 | Deadline approve by intern or paralegal | 403 | Historical. Not re-run. |
+| 15 | Hearing outcome by a paralegal, review by an attorney | Draft, then reviewed | Cloud journey, section 4.2. Paralegal review 403. Attorney review 201. |
+| 16 | Schedule next | One manual hearing at the chosen IST instant | Cloud journey, section 4.2. Not a limitation calculation. |
+| 17 | Deadline approve by intern or paralegal | 403 | Cloud journey, section 4.2. Both 403. Attorney approve 201. |
 | 18 | Deadline edit after approval | Needs approval again | REQUIREMENT. Confirm in the next test pass; not re-run here. |
 | 19 | No route computes a limitation period | Absent | BRANCH-IMPLEMENTED by absence. Not a certificate. |
-| 20 | Upload executable type or a path-like name | 400, name sanitised | Historical documents tests. Not re-run. |
-| 21 | Scanner cannot run | Not marked clean | BRANCH-IMPLEMENTED. Fresh outage drill not re-run. |
+| 20 | Upload executable type or a path-like name | 400, name sanitised | Cloud journey rejected the executable with 400. Path sanitising was the section 4.1 check, not repeated as a second file. |
+| 21 | Scanner cannot run | Not marked clean | Cloud journey status `skipped`. Portal share 409. Not marked clean. |
 | 22 | Signed download for another object | Rejected | REQUIREMENT. Not re-run as a dedicated case in this pass. |
-| 23 | Intern sees only the assigned matter | Other matter 404 | Historical. Not re-run. |
+| 23 | Intern sees only the assigned matter | Other matter 404 | Cloud journey API 404 and the staff screen “you do not have access.” |
 | 24 | Intern revoked | Access gone | REQUIREMENT. Not re-run here. |
 | 25 | Outbox without consent | Rejected | Historical. Not re-run. |
-| 26 | Approve with mock provider | `mock_delivered`, no socket | Historical. Not re-run. |
+| 26 | Approve with mock provider | `mock_delivered`, no socket | Cloud journey. Provider `mock`. No socket. |
 | 27 | Approve with provider unset | `external_activation_gate` | Historical. Not re-run. |
-| 28 | Local email mode | `held_local`, mailbox row, no socket | Working-tree pass. |
+| 28 | Local email mode | `held_local`, mailbox row, no socket | Cloud journey. Status `held_local`, provider `local_mailbox`. The portal does not show that row. |
 | 29 | SMTP mode | Gate, `smtp_send_not_enabled`, no socket | Working-tree pass. |
 | 30 | Mock webhook bad signature or replay | Rejected or ignored | Historical. Not re-run. |
 | 31 | WhatsApp missing key, template, window, or opt-out | Not sent | BRANCH-IMPLEMENTED adapter tests used fake fetch. Not re-run. |
 | 32 | INR selected by a person; tax 0 | Issue allowed; no invented GST | Historical billing. Not re-run. |
-| 33 | Tax above 0 without accountant review | 409, then issue after review | Working-tree pass. |
+| 33 | Tax above 0 without accountant review | 409, then issue after review | Cloud journey. Billing user reviewed, then issued. 18% was typed. Currency INR. |
 | 34 | Duplicate payment key | No second ledger line | Historical idempotency. Not re-run. |
-| 35 | Portal client sees a draft or another client | Hidden or 404 | Historical portal flows. Not re-run. |
+| 35 | Portal client sees a draft or another client | Hidden or 404 | Cloud journey. Other matter hidden. Draft invoice absent. Local email absent. Mock update and paid invoice visible. |
 | 36 | n8n example host | Worker rejects it | Historical. Not re-run. |
 | 37 | Disposable n8n | 6 tests passed on 1.123.92 | Historical. Binary may be gone. UNKNOWN today. |
-| 38 | Landing keyboard, 44 px, reduced motion | Measured on the 16.4.5 commit for the controls named in the report | Historical. Working-tree form not rescored. |
+| 38 | Landing keyboard, 44 px, reduced motion | Measured on the 16.4.5 commit for the controls named in the report | Landing evidence stays section 4.1. Staff and portal 44px, Tab, 390, and reduced motion are section 4.2. |
 | 39 | Unconfigured demo | No form, nothing stored | BRANCH-IMPLEMENTED. |
 | 40 | Local demo slot booked twice | 201 then 409, notification `not_sent` | Working-tree pass. |
 | 41 | Court form signoff by paralegal, service token, attorney | 403, 401, then `legally_approved` with `licenseCheck` `not_performed` | Working-tree pass. |
-| 42 | Cold start, `/readyz` when Mongo is down, then up | 503 then 200 | NOT-RUN. |
-| 43 | Restart mongod and read the same synthetic document | Still present | NOT-RUN. |
-| 44 | Full browser journey: intake, matter, private file, hearing, deadline, intern denial, mock message, INR invoice, manual payment, portal | Each step on one running stack | NOT-RUN as one journey. |
+| 42 | Cold start, `/readyz` when Mongo is down, then up | 503 then 200 | Section 4.2, owned mongod only. 503 `mongodb: failing`, then 200. |
+| 43 | Restart mongod and read the same synthetic document | Still present | Section 4.2. Journey matter and 23-byte file survived. Foreign `/tmp/mongo-data` was not restarted. |
+| 44 | Full browser journey: intake, matter, private file, hearing, deadline, intern denial, mock message, INR invoice, manual payment, portal | Each step on one running stack | Cloud-local pass, section 4.2. Portal file remains blocked until a scan is `clean`. Not owner UAT. |
 | 45 | Owner UAT | Signed by the owner | NOT-RUN. |
 | 46 | Restore a backup and verify | Counts match | NOT-RUN. Script exists only. |
 | 47 | Payment gateway charge | Must not exist | Confirmed absent. Deferred. |
@@ -698,13 +726,13 @@ Rows 1–48 are the matrix. Historical passes are not a pass of every row.
 
 ## 15. Local handoff
 
-The owner’s computer was offline. Anything running in this cloud worker is not that computer. The owner runs the stack later. This documentation pass did not execute `scripts/local-demo.sh`. The script and `scripts/seed-demo.mjs` are WORKING-TREE files and are not part of the docs commit that adds this PRD.
+The owner’s computer was offline. Anything running in this cloud worker is not that computer. The owner runs the stack later. Version 1.0 of this section had not executed `scripts/local-demo.sh`. Section 4.2 did, on this worker only, against `/workspace/.data/demo-mongo` and port 27119.
 
 ### 15.1 What the owner’s machine needs
 
 - Node 22 or newer, pnpm 9.11.0, a local MongoDB 7 that can be a replica set, Redis 7.
 - No production secrets. Demo mode stays `NODE_ENV=development`. Production auth checks are not disabled.
-- Ports the scripts aim at: marketing 3000, dashboard 3001, portal 3002, API 4000, worker health 4100, Mongo 27117, Redis 6380. Confirm them with the status command before trusting this list on a new machine.
+- App ports: marketing 3000, dashboard 3001, portal 3002, API 4000, worker health 4100. Mongo and Redis are 27117 and 6380 only when those ports are free or already serving this demo’s directories `.data/mongo` and `.data/redis`. If another program owns the port, the script leaves it running and uses `.data/demo-mongo` on the first free port in 27119–27122, and `.data/redis` on the first free port in 6382–6384. Read `.data/demo-services.env` for the ports actually chosen. `mongod` must be on PATH, or the script prints the binary it found and exits if it finds none.
 - Health: `GET /healthz` is liveness. `GET /readyz` checks Mongo and Redis. A dependency that is down is a failed ready check, not a hidden success.
 - Login material, if the seed is run, is written only to `.data/demo-login.txt` on that machine. This document does not contain a password, a TOTP secret, or a recovery code.
 - Registration may be on only long enough to seed, then the API must be restarted with it off. Invite remains the normal path.
@@ -771,6 +799,7 @@ This PRD does not authorise new application behaviour. Implementation continues 
 | 1.0 | 8 Nov 2026 | First master PRD. Cutoff 10:23 IST for owner decisions. Code facts verified later the same day on this worker and labelled. |
 | 1.0.1 | 8 Nov 2026 | Correct the closed-decision line that said WIMO and its marketing site were paused. Only WIMO development is paused. Existing WIMO marketing routines remain untouched and are not paused. No WIMO file was changed. |
 | 1.0.2 | 8 Nov 2026 | Record the cloud-localhost checks from the continuation. Not owner UAT. Not a security or legal certificate. The code commit is named in section 4.1. |
+| 1.0.3 | 8 Nov 2026 | Record the connected cloud-local journey, the 44px staff and portal measurements, the owned data directories, and the fresh production build. Implementation commit `b98c20a37d24c7f47b7cefb54f980dd82089e905`. Not owner UAT. Not a security or legal certificate. |
 
 ## 19. Provenance
 
