@@ -44,6 +44,26 @@ export const memberships = {
     MembershipModel.countDocuments({ organizationId, userId: { $in: userIds }, status: 'active' }),
   countActiveWithRole: (organizationId: Id, role: Role) =>
     MembershipModel.countDocuments({ organizationId, role, status: 'active' }),
+  /**
+   * Names of active members of this organization only. A user id from another firm is omitted.
+   * Returns name and id, never email or role.
+   */
+  async displayNames(organizationId: Id, userIds: Id[]) {
+    const ids = [...new Set(userIds.map(String))].filter(Boolean);
+    if (!ids.length) return [];
+    const members = await MembershipModel.find({
+      organizationId,
+      userId: { $in: ids },
+      status: 'active',
+    })
+      .select('userId')
+      .lean();
+    if (!members.length) return [];
+    const people = await UserModel.find({ _id: { $in: members.map((m) => m.userId) } })
+      .select('name')
+      .lean();
+    return people.map((p) => ({ userId: String(p._id), name: p.name }));
+  },
   async listPage(organizationId: Id, limit: number, cursor?: string) {
     const c = decodeCursor(cursor);
     if (c === null) throw new InvalidCursorError();

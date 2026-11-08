@@ -24,6 +24,7 @@ import type { JobQueues } from '@assar/jobs';
 import { AuditService } from '../audit/audit.service';
 import type { AppRequest, AuthContext } from '../common/auth-context';
 import { ApiError } from '../common/exception.filter';
+import { memberNames, teamNames } from '../common/identity';
 import { assertActiveMembers } from '../common/members';
 import { QUEUES } from '../queue/queue.module';
 import { MatterAccessService } from './matter-access.service';
@@ -73,6 +74,24 @@ const courtWrite = (court: NonNullable<z.infer<typeof createMatterSchema>['court
   verifiedAt: null,
   verifiedBy: null,
 });
+
+const withIdentity = async (orgId: string, rows: MatterDoc[]) => {
+  const leads = await memberNames(
+    orgId,
+    rows.map((m) => idStr(m.leadAttorneyId)),
+  );
+  const linked = await teamNames(
+    orgId,
+    rows.flatMap((m) => m.teamIds.map(String)),
+  );
+  return rows.map((m) => ({
+    ...matterDto(m),
+    leadAttorneyName: leads.get(String(m.leadAttorneyId ?? '')) ?? null,
+    teams: m.teamIds
+      .map((id) => ({ id: String(id), name: linked.get(String(id)) }))
+      .filter((t): t is { id: string; name: string } => !!t.name),
+  }));
+};
 
 export const matterDto = (m: MatterDoc) => ({
   id: String(m._id),
@@ -189,7 +208,7 @@ export class MattersService {
         },
       })
       .catch(() => undefined);
-    return matterDto(matter);
+    return (await withIdentity(orgId, [matter]))[0]!;
   }
 
   async list(auth: AuthContext, q: z.infer<typeof matterListQuerySchema>) {
@@ -203,12 +222,14 @@ export class MattersService {
       restrictedVisibleIds,
       assignedOnlyIds,
     });
-    return { data: page.data.map(matterDto), page: page.page };
+    const data = await withIdentity(auth.organizationId, page.data);
+    return { data, page: page.page };
   }
 
   async get(auth: AuthContext, id: string, req: Req) {
     const m = await this.access.load(auth, id, req);
-    return { ...matterDto(m), canManageAccess: this.access.canManageAccess(auth, m) };
+    const [dto] = await withIdentity(auth.organizationId, [m]);
+    return { ...dto, canManageAccess: this.access.canManageAccess(auth, m) };
   }
 
   async update(auth: AuthContext, id: string, patch: z.infer<typeof updateMatterSchema>, req: Req) {
@@ -233,7 +254,7 @@ export class MattersService {
       req,
       meta: { fields: Object.keys(patch) },
     });
-    return matterDto(updated);
+    return (await withIdentity(orgId, [updated]))[0]!;
   }
 
   /** Records that a person compared this entry with an official source. Does not fetch that source. */
@@ -261,7 +282,7 @@ export class MattersService {
       req,
       meta: { freshness: 'verified_manual' },
     });
-    return matterDto(updated);
+    return (await withIdentity(auth.organizationId, [updated]))[0]!;
   }
 
   private async internAssignees(orgId: string, matterId: string) {

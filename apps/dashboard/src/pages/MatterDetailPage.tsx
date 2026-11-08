@@ -96,7 +96,7 @@ function Overview({ m, onSaved }: { m: MatterDto; onSaved: () => void }) {
         <dl className="space-y-3 text-sm">
           <div>
             <dt className="text-navy-600">Lead attorney</dt>
-            <dd>{name(m.leadAttorneyId)}</dd>
+            <dd>{m.leadAttorneyName || name(m.leadAttorneyId)}</dd>
           </div>
           <div>
             <dt className="text-navy-600">Opened</dt>
@@ -367,7 +367,7 @@ function MatterTasks({ id }: { id: string }) {
             {p.data.map((t) => (
               <tr key={t.id}>
                 <Td className="font-medium">{t.title}</Td>
-                <Td>{name(t.assigneeId)}</Td>
+                <Td>{t.assigneeName || name(t.assigneeId)}</Td>
                 <Td className={isOverdue(t.dueAt, t.status) ? 'font-medium text-red-700' : ''}>
                   {formatDate(t.dueAt)}
                 </Td>

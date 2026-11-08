@@ -240,6 +240,11 @@ export const teams = {
   delete: (organizationId: Id, id: Id) => TeamModel.deleteOne({ _id: id, organizationId }),
   countIn: (organizationId: Id, ids: Id[]) =>
     TeamModel.countDocuments({ organizationId, _id: { $in: ids } }),
+  /** Names of teams that already belong to this organization. No member roster. */
+  displayNames: (organizationId: Id, ids: Id[]) =>
+    TeamModel.find({ organizationId, _id: { $in: ids } })
+      .select('name')
+      .lean(),
 };
 
 export const conflictChecks = {

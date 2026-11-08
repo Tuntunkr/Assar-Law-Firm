@@ -100,7 +100,7 @@ export function TasksPage() {
                       <p className="truncate text-xs text-navy-600">{t.description}</p>
                     )}
                   </Td>
-                  <Td>{name(t.assigneeId)}</Td>
+                  <Td>{t.assigneeName || name(t.assigneeId)}</Td>
                   <Td>
                     <StatusPill tone={toneOf(t.priority)}>{t.priority}</StatusPill>
                   </Td>

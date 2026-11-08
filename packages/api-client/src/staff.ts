@@ -58,7 +58,11 @@ export interface MatterDto {
   portalVisible: boolean;
   portalNote: string | null;
   leadAttorneyId: string | null;
+  /** Name of the lead when they are an active member of this firm. Not a directory. */
+  leadAttorneyName?: string | null;
   teamIds: string[];
+  /** Teams already linked to this matter. Names only. */
+  teams?: { id: string; name: string }[];
   openedAt: string;
   closedAt: string | null;
   createdAt: string;
@@ -103,6 +107,8 @@ export interface TaskDto {
   status: 'todo' | 'in_progress' | 'done' | 'cancelled';
   priority: 'low' | 'normal' | 'high';
   assigneeId: string | null;
+  /** Name of the assignee when they are an active member of this firm. */
+  assigneeName?: string | null;
   dueAt: string | null;
   completedAt: string | null;
   createdAt: string;

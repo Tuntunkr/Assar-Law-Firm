@@ -5,11 +5,23 @@ import type { createTaskSchema, taskListQuerySchema, updateTaskSchema } from '@a
 import { AuditService } from '../audit/audit.service';
 import type { AppRequest, AuthContext } from '../common/auth-context';
 import { ApiError } from '../common/exception.filter';
+import { memberNames } from '../common/identity';
 import { assertActiveMembers } from '../common/members';
 import { MatterAccessService } from '../matters/matter-access.service';
 
 type Req = Pick<AppRequest, 'ip' | 'id'>;
 const idStr = (v: unknown) => (v == null ? null : String(v));
+
+const withAssignee = async (orgId: string, rows: TaskDoc[]) => {
+  const names = await memberNames(
+    orgId,
+    rows.map((t) => idStr(t.assigneeId)),
+  );
+  return rows.map((t) => ({
+    ...taskDto(t),
+    assigneeName: names.get(String(t.assigneeId ?? '')) ?? null,
+  }));
+};
 
 export const taskDto = (t: TaskDoc) => ({
   id: String(t._id),
@@ -95,7 +107,7 @@ export class TasksService {
       req,
       meta: { matterId: idStr(t.matterId), assigneeId: idStr(t.assigneeId) },
     });
-    return taskDto(t);
+    return (await withAssignee(auth.organizationId, [t]))[0]!;
   }
 
   async list(auth: AuthContext, q: z.infer<typeof taskListQuerySchema>, req: Req) {
@@ -108,11 +120,11 @@ export class TasksService {
       assigneeId,
       hiddenMatterIds,
     });
-    return { data: page.data.map(taskDto), page: page.page };
+    return { data: await withAssignee(auth.organizationId, page.data), page: page.page };
   }
 
   async get(auth: AuthContext, id: string, req: Req) {
-    return taskDto((await this.load(auth, id, req)).task);
+    return (await withAssignee(auth.organizationId, [(await this.load(auth, id, req)).task]))[0]!;
   }
 
   async update(auth: AuthContext, id: string, patch: z.infer<typeof updateTaskSchema>, req: Req) {
@@ -155,7 +167,7 @@ export class TasksService {
       req,
       meta: { fields: Object.keys(patch) },
     });
-    return taskDto(updated);
+    return (await withAssignee(auth.organizationId, [updated]))[0]!;
   }
 
   async remove(auth: AuthContext, id: string, req: Req) {

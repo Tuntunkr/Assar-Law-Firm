@@ -128,7 +128,7 @@ export function MattersPage() {
                   </Td>
                   <Td>{clientName(m.clientId)}</Td>
                   <Td>{AREA_LABEL[m.practiceArea] ?? m.practiceArea}</Td>
-                  <Td>{name(m.leadAttorneyId)}</Td>
+                  <Td>{m.leadAttorneyName || name(m.leadAttorneyId)}</Td>
                   <Td>
                     <StatusPill tone={toneOf(m.status)}>{m.status}</StatusPill>
                   </Td>

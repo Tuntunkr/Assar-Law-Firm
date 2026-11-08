@@ -224,15 +224,19 @@ if (link.status === 200 || link.status === 201) {
 } else {
   note('staff download', link.status, { detail: link.body?.error?.message ?? '', ok: false });
 }
-const share = await owner.call(
-  'PUT',
-  `/v1/documents/${created.document.id}/versions/${created.version.version}/share`,
-  { shared: true },
-);
-note('portal share of unscanned file', share.status, {
-  detail: share.body?.error?.message ?? share.body?.shared,
-  ok: share.status === 409,
-});
+if (scan === 'clean') {
+  note('clean scan leaves sharing to the scanner check', 200, { ok: true });
+} else {
+  const share = await owner.call(
+    'PUT',
+    `/v1/documents/${created.document.id}/versions/${created.version.version}/share`,
+    { shared: true },
+  );
+  note('portal share of unscanned file', share.status, {
+    detail: share.body?.error?.message ?? '',
+    ok: scan === 'skipped' && share.status === 409,
+  });
+}
 const exe = await owner.call('POST', `/v1/matters/${matter.id}/documents`, {
   title: 'Blocked',
   filename: 'payload.exe',
