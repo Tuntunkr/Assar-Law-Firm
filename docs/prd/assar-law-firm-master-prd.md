@@ -87,6 +87,24 @@ This is the decision trail. It is not a transcript and it does not repeat privat
 | Restart persistence of a demo document | NOT-RUN in this documentation pass. Do not claim it. |
 | Owner UAT, merge, deploy | Not done. |
 
+### 4.1 Continuation checked on this cloud worker
+
+This is not the owner’s computer. The owner’s machine was not used.
+
+On 8 Nov 2026, after version 1.0.1, the uncommitted continuation was booted here and checked. The implementation commit is `80c7083a8ec425c6b8fa8b064f8405a5ff7c53fd`. Commands and counts are in the handoff artifact, not repeated as a certificate.
+
+- API tests, fresh vitest, not a Turbo cache: 300 passed, 6 skipped because `N8N_BIN` was unset. A separate run with the disposable n8n 1.123.92 passed those 6.
+- Worker tests: 10 passed. Other package tests passed, including dashboard 38, portal 26, jobs 49, workflows 33. `@assar/web` still has no test files. `@assar/ui` still prints that it has no tests. Storage’s 3 tests were a Turbo cache hit.
+- `GET /v1/auth/register` returned 403, “Registration is disabled.”
+- Owner login succeeded. The intern, who had no assignment, received 404 for the synthetic matter. An unknown matter id returned 404. `GET /v1/courts/provider` stayed `external_activation_gate`.
+- An executable upload returned 400. A filename with `../` was stored as a sanitised name. The bytes landed under `.data/storage` at the `org/.../matter/.../doc/...` key. The version status became `skipped`, not `clean`, because this demo sets `SCAN_PROVIDER=disabled`. A download before that status was 409.
+- Passwords in `users` start with `$argon2id`. Owner and billing have MFA enabled. The MFA field is not the short authenticator secret.
+- Indexes read from the live `assar_demo` database match the schema names in section 8, including `matteraccesses` and `organizationId_1_court.cnr_1`.
+- Stopping the mongod that actually held the data made `GET /readyz` return 503 `{"status":"not_ready","checks":{"mongodb":"failing","redis":"ok"}}` after a small health-controller fix. Starting that same data directory again returned the matter `Synthetic preview matter`, CNR `SYNTHETICPREVIEW`, and the 23-byte file row. The first restart attempt was wrong: `scripts/dev-services.sh` did not own the already-running mongod, its data directory was `/tmp/mongo-data`, and `mongod` was not on this shell’s PATH. `./.data/mongo` is a different directory and did not contain `assar_demo`.
+- Browser, headless Chrome, console empty: home, services, solutions, pricing, and contact at 1440 and 390. No horizontal overflow. Contact offered local slots. The mobile menu opened. Focused skip link measured about 138×44. Unfocused, it is clipped. Reduced motion set the eyebrow animation name to `none`; the normal name was `rise`. A screen recording was saved and was not reviewed, because the video reviewer could not be started. Computed style is the motion evidence.
+- Dashboard matters, updates, and invoices were opened as the owner. The portal at 390 showed the synthetic matter for the portal user. Staff sidebar links measured about 36px tall. That is not a 44px pass for the dashboard.
+- No payment gateway, no live court, no live WhatsApp, no SMTP send, no merge, and no deploy.
+
 ## 5. Users and the permission map
 
 Staff roles in `packages/types/src/index.ts` are `owner`, `admin`, `attorney`, `paralegal`, `billing`, `staff`, and `intern`. There is no staff role named `client`. A portal user is a `ClientUser` with a separate cookie.
@@ -752,6 +770,7 @@ This PRD does not authorise new application behaviour. Implementation continues 
 | --- | --- | --- |
 | 1.0 | 8 Nov 2026 | First master PRD. Cutoff 10:23 IST for owner decisions. Code facts verified later the same day on this worker and labelled. |
 | 1.0.1 | 8 Nov 2026 | Correct the closed-decision line that said WIMO and its marketing site were paused. Only WIMO development is paused. Existing WIMO marketing routines remain untouched and are not paused. No WIMO file was changed. |
+| 1.0.2 | 8 Nov 2026 | Record the cloud-localhost checks from the continuation. Not owner UAT. Not a security or legal certificate. The code commit is named in section 4.1. |
 
 ## 19. Provenance
 
