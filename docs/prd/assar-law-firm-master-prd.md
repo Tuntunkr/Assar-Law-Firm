@@ -41,7 +41,7 @@ The first deployment is that friend firm, on infrastructure the firm controls. F
 - No claim that a WhatsApp template, a court form, or a tax rate is approved.
 - No payment gateway in this phase. The owner adds their own gateway API and security after a full local demo. No gateway client, webhook, or `PAYMENT_GATEWAY` variable exists in the tree. Manual payment recording stays.
 - No production database, production deploy, merge, real recipient message, charge, or court filing without a separate approval.
-- WIMO and its marketing site are paused and out of this repository’s work.
+- Only WIMO development is paused. Existing WIMO marketing routines stay as they are and are not paused. This repository does not change those routines or any other repository. That boundary was already the owner’s rule. It is not a new instruction to edit WIMO.
 - A GitHub pull request was refused because the account must be a collaborator. That refusal stands. This document does not authorise a workaround.
 
 ### 2.2 Unknowns that block product claims
@@ -751,6 +751,7 @@ This PRD does not authorise new application behaviour. Implementation continues 
 | Version | When | Change |
 | --- | --- | --- |
 | 1.0 | 8 Nov 2026 | First master PRD. Cutoff 10:23 IST for owner decisions. Code facts verified later the same day on this worker and labelled. |
+| 1.0.1 | 8 Nov 2026 | Correct the closed-decision line that said WIMO and its marketing site were paused. Only WIMO development is paused. Existing WIMO marketing routines remain untouched and are not paused. No WIMO file was changed. |
 
 ## 19. Provenance
 
@@ -773,3 +774,4 @@ Code-fact corrections against the owner’s consolidated brief, labelled so they
 - CORRECTION: `demobookings.slotStart` is unique globally, not per firm.
 - CORRECTION: Mongoose collection `matteraccesses` is the real name. It is not `matter_access`.
 - CORRECTION: this file was not saved by the earlier failed writes. Presence is proved only by the read-back recorded with the commit that adds it.
+- CORRECTION (1.0.1): version 1.0 said “WIMO and its marketing site are paused.” That sentence was misleading. Only WIMO development is paused. Existing WIMO marketing routines must remain untouched and are not paused. This correction does not authorise any edit outside this repository.
