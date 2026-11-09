@@ -5,8 +5,8 @@ type Id = string | { toString(): string };
 
 /**
  * Chat threads are private to the user who created them. Every query includes
- * `organizationId`. Listing also includes `userId`, so a thread owned by someone else
- * in the same firm is not found.
+ * `organizationId`. Listing and appending also include `userId`, so a thread owned
+ * by someone else in the same firm is not found.
  */
 export const assistantThreads = {
   create: async (data: { organizationId: Id; userId: Id; title: string }) =>
@@ -23,21 +23,22 @@ export const assistantMessages = {
   append: async (data: {
     threadId: Id;
     organizationId: Id;
+    userId: Id;
     role: 'user' | 'assistant';
     body: string;
     toolName?: string | null;
     proposal?: unknown;
     route?: AssistantRoute | null;
   }) => {
-    const thread = await AssistantThreadModel.findOneAndUpdate(
-      {
-        _id: data.threadId as never,
-        organizationId: data.organizationId as never,
-      },
-      { $currentDate: { updatedAt: true } },
-    );
+    const thread = await AssistantThreadModel.findOne({
+      _id: data.threadId as never,
+      organizationId: data.organizationId as never,
+      userId: data.userId as never,
+    })
+      .select('_id')
+      .lean();
     if (!thread) return null;
-    return (
+    const message = (
       await AssistantMessageModel.create({
         organizationId: data.organizationId as never,
         threadId: data.threadId as never,
@@ -48,6 +49,15 @@ export const assistantMessages = {
         proposal: data.proposal ?? null,
       })
     ).toObject();
+    await AssistantThreadModel.updateOne(
+      {
+        _id: data.threadId as never,
+        organizationId: data.organizationId as never,
+        userId: data.userId as never,
+      },
+      { $currentDate: { updatedAt: true } },
+    );
+    return message;
   },
   /**
    * Latest `limit` messages (default 12), oldest first.
