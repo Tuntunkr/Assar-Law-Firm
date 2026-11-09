@@ -6,6 +6,7 @@ import { RequireAuth, RequirePermission } from './components/RequireAuth';
 import { PeopleProvider } from './lib/people';
 import { AcceptInvitePage } from './pages/AcceptInvitePage';
 import { AiPage } from './pages/AiPage';
+import { AskPage } from './pages/AskPage';
 import { AuditPage } from './pages/AuditPage';
 import { CalendarPage } from './pages/CalendarPage';
 import { ClientDetailPage } from './pages/ClientDetailPage';
@@ -49,6 +50,7 @@ export function AppRoutes() {
           }
         >
           <Route index element={<OverviewPage />} />
+          <Route path="ask" element={guard('assistant:use', <AskPage />)} />
           <Route path="mfa-setup" element={<MfaSetupPage />} />
           <Route path="clients" element={guard('client:read', <ClientsPage />)} />
           <Route path="clients/:id" element={guard('client:read', <ClientDetailPage />)} />

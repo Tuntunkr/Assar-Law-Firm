@@ -244,6 +244,30 @@ export interface AiOutputDto {
   model: string | null;
   createdAt: string;
 }
+export interface AssistantThreadDto {
+  id: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+}
+export interface AssistantProposalDto {
+  tool: string;
+  arguments: Record<string, unknown>;
+  status: 'pending' | 'confirming' | 'done';
+}
+export interface AssistantMessageDto {
+  id: string;
+  threadId: string;
+  role: 'user' | 'assistant';
+  body: string;
+  route: 'help' | 'lookup' | 'action' | 'refuse' | null;
+  toolName: string | null;
+  proposal: AssistantProposalDto | null;
+  createdAt: string;
+}
+export interface AssistantThreadDetailDto extends AssistantThreadDto {
+  messages: AssistantMessageDto[];
+}
 export interface TimeEntryDto {
   id: string;
   matterId: string;
@@ -554,6 +578,16 @@ export function createStaffClient(options: ClientOptions) {
     rejectAiOutput: (id: string, reason: string) =>
       post<AiOutputDto>(`/ai/outputs/${id}/reject`, { reason }),
     shareAiOutput: (id: string, shared: boolean) => put(`/ai/outputs/${id}/share`, { shared }),
+
+    // assistant
+    assistantThreads: () => get<{ data: AssistantThreadDto[] }>('/assistant/threads'),
+    createAssistantThread: (b?: { title?: string }) =>
+      post<AssistantThreadDto>('/assistant/threads', b ?? {}),
+    assistantThread: (id: string) => get<AssistantThreadDetailDto>(`/assistant/threads/${id}`),
+    sendAssistantMessage: (id: string, body: string) =>
+      post<AssistantMessageDto>(`/assistant/threads/${id}/messages`, { body }),
+    confirmAssistant: (id: string, messageId: string) =>
+      post<AssistantMessageDto>(`/assistant/threads/${id}/confirm`, { messageId }),
 
     // billing
     billingSettings: () => get<BillingSettingsDto>('/billing/settings'),
