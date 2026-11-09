@@ -10,5 +10,6 @@ import { TimeService } from './time.service';
 @Module({
   controllers: [TimeController, InvoicesController, ReportsController, BillingSettingsController],
   providers: [TimeService, InvoicesService, ReportsService],
+  exports: [TimeService, InvoicesService],
 })
 export class BillingModule {}

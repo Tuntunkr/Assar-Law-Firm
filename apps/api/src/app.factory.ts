@@ -4,6 +4,7 @@ import cookieParser from 'cookie-parser';
 import type { NextFunction, Request, Response } from 'express';
 import helmet from 'helmet';
 import type { DestinationStream } from 'pino';
+import type { Composer } from './assistant/assistant.service';
 import { AppModule } from './app.module';
 import { LOGGER, type Logger } from './common/logger';
 import { requestIdMiddleware } from './common/request-id.middleware';
@@ -12,6 +13,11 @@ import type { Env } from './config/env';
 export interface CreateAppOptions {
   /** Where logs go (tests capture them to prove nothing sensitive is written). Defaults to stdout. */
   logDestination?: DestinationStream;
+  /**
+   * Phrases help and lookup replies. The API process does not hold a model key;
+   * when this is omitted, the default composer does not use the network.
+   */
+  composer?: Composer;
 }
 
 export async function createApp(
