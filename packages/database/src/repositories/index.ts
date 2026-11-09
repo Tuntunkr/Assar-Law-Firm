@@ -156,3 +156,4 @@ export * from './billing.js';
 export * from './timeline.js';
 export * from './templates.js';
 export * from './reminders.js';
+export * from './assistant.js';
