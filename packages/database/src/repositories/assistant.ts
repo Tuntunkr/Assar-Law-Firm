@@ -117,27 +117,50 @@ export const assistantMessages = {
     }).lean();
   },
   /**
-   * Sets a pending proposal to `done`. Null when the thread is not this user's,
-   * or the proposal is missing or no longer pending. Does not change `append`.
+   * Claims a pending proposal by setting `confirming` in the same update.
+   * Null when this user does not own the thread, or the proposal is missing or not pending.
+   * Does not change `append`.
    */
-  async markProposalDone(data: { threadId: Id; organizationId: Id; userId: Id; messageId: Id }) {
-    const thread = await AssistantThreadModel.findOne({
-      _id: data.threadId as never,
-      organizationId: data.organizationId as never,
-      userId: data.userId as never,
-    })
-      .select('_id')
-      .lean();
-    if (!thread) return null;
-    return AssistantMessageModel.findOneAndUpdate(
-      {
-        _id: data.messageId as never,
-        threadId: data.threadId as never,
-        organizationId: data.organizationId as never,
-        'proposal.status': 'pending',
-      },
-      { $set: { 'proposal.status': 'done' } },
-      { returnDocument: 'after' },
-    ).lean();
-  },
+  claimProposal: (data: ProposalScope) => transitionProposal(data, 'pending', 'confirming'),
+  /**
+   * Sets a confirming proposal to `done`. Null when the thread is not this user's,
+   * or the proposal is missing or not confirming. Does not change `append`.
+   */
+  markProposalDone: (data: ProposalScope) => transitionProposal(data, 'confirming', 'done'),
+  /**
+   * Sets a confirming proposal back to `pending` so a failed confirm can be retried.
+   * Null when it is not confirming.
+   */
+  releaseProposal: (data: ProposalScope) => transitionProposal(data, 'confirming', 'pending'),
 };
+
+type ProposalScope = { threadId: Id; organizationId: Id; userId: Id; messageId: Id };
+
+/**
+ * One update, scoped to this user's thread. Matches only `from`, so two confirms
+ * cannot both claim the same pending proposal.
+ */
+async function transitionProposal(
+  data: ProposalScope,
+  from: 'pending' | 'confirming',
+  to: 'pending' | 'confirming' | 'done',
+) {
+  const thread = await AssistantThreadModel.findOne({
+    _id: data.threadId as never,
+    organizationId: data.organizationId as never,
+    userId: data.userId as never,
+  })
+    .select('_id')
+    .lean();
+  if (!thread) return null;
+  return AssistantMessageModel.findOneAndUpdate(
+    {
+      _id: data.messageId as never,
+      threadId: data.threadId as never,
+      organizationId: data.organizationId as never,
+      'proposal.status': from,
+    },
+    { $set: { 'proposal.status': to } },
+    { returnDocument: 'after' },
+  ).lean();
+}

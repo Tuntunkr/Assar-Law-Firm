@@ -100,7 +100,7 @@ type Req = Pick<AppRequest, 'ip' | 'id'>;
 interface Proposal {
   tool: string;
   arguments: unknown;
-  status: 'pending' | 'done';
+  status: 'pending' | 'confirming' | 'done';
 }
 
 function words(value: string): string[] {
@@ -194,7 +194,7 @@ function readProposal(value: unknown): Proposal | null {
   if (typeof value !== 'object' || value === null) return null;
   const row = value as Record<string, unknown>;
   if (typeof row.tool !== 'string') return null;
-  if (row.status !== 'pending' && row.status !== 'done') return null;
+  if (row.status !== 'pending' && row.status !== 'confirming' && row.status !== 'done') return null;
   if (!Object.hasOwn(row, 'arguments')) return null;
   return { tool: row.tool, arguments: row.arguments, status: row.status };
 }
@@ -330,30 +330,29 @@ export class AssistantService {
 
   async confirm(auth: AuthContext, threadId: string, messageId: string, req: Req) {
     await this.ownedThread(auth, threadId);
-    const message = await assistantMessages.findForUser({
+    const scope = {
       threadId,
       organizationId: auth.organizationId,
       userId: auth.userId,
       messageId,
-    });
-    const proposal = readProposal(message?.proposal);
-    if (!message || !proposal || proposal.status !== 'pending') {
-      throw new ApiError(404, 'NOT_FOUND', 'Proposal not found');
+    };
+    const claimed = await assistantMessages.claimProposal(scope);
+    if (!claimed) throw new ApiError(404, 'NOT_FOUND', 'Proposal not found');
+
+    const proposal = readProposal(claimed.proposal);
+    try {
+      if (!proposal) throw new ApiError(404, 'NOT_FOUND', 'Proposal not found');
+      const permission = WRITE_PERMISSION[proposal.tool];
+      if (!permission || !hasPermission(auth.role, permission)) {
+        throw new ApiError(403, 'FORBIDDEN', 'You cannot do that.');
+      }
+      await this.perform(proposal.tool, proposal.arguments, auth, req);
+    } catch (error) {
+      await assistantMessages.releaseProposal(scope).catch(() => undefined);
+      throw error;
     }
 
-    const permission = WRITE_PERMISSION[proposal.tool];
-    if (!permission || !hasPermission(auth.role, permission)) {
-      throw new ApiError(403, 'FORBIDDEN', 'You cannot do that.');
-    }
-
-    await this.perform(proposal.tool, proposal.arguments, auth, req);
-
-    const marked = await assistantMessages.markProposalDone({
-      threadId,
-      organizationId: auth.organizationId,
-      userId: auth.userId,
-      messageId,
-    });
+    const marked = await assistantMessages.markProposalDone(scope);
     if (!marked) throw new ApiError(404, 'NOT_FOUND', 'Proposal not found');
     return messageDto(marked);
   }
