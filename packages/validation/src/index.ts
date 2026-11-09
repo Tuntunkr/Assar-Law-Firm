@@ -639,3 +639,5 @@ export function weakSecretReason(value: string, minLength = 32): string | null {
   if (/^(.)\1+$/.test(value) || /^(..+?)\1+$/.test(value)) return 'is a repeated pattern';
   return null;
 }
+
+export { sendAssistantMessageSchema, type SendAssistantMessage } from './assistant.js';
