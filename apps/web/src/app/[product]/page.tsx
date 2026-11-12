@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { Section } from '@assar/ui';
 import { FeatureGrid } from '@/components/FeatureGrid';
 import { PageHero } from '@/components/PageHero';
+import { pageImagery } from '@/content/imagery';
 import { productPages } from '@/content/services';
 
 export const dynamicParams = false;
@@ -29,7 +30,7 @@ export default async function ProductPage({ params }: { params: Promise<{ produc
   if (!page) notFound();
   return (
     <>
-      <PageHero title={page.title} summary={page.summary} />
+      <PageHero title={page.title} summary={page.summary} image={pageImagery[page.slug]} />
       <Section title="Capabilities">
         <FeatureGrid items={page.features} />
         {page.guardrail && (

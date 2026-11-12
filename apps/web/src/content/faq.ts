@@ -25,6 +25,6 @@ export const faqs = [
   },
   {
     q: 'How is pricing set?',
-    a: 'Pricing is being finalized. Book a demo and we will share current options.',
+    a: 'List prices are monthly, in USD, for the firm: Starter $79, Professional $199, and Enterprise $499. Book a demo if you want annual billing or a plan matched to your team.',
   },
 ];

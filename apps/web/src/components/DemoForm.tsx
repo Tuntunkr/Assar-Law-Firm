@@ -57,7 +57,7 @@ export function DemoForm() {
   }
 
   if (state.kind === 'ok') {
-    return <Alert tone="success">Thanks — your request was received. We will be in touch.</Alert>;
+    return <Alert tone="success">Thanks. Your request was received. We will be in touch.</Alert>;
   }
 
   return (
@@ -133,7 +133,7 @@ export function DemoForm() {
         )}
       </div>
       <Button type="submit" size="lg" loading={state.kind === 'sending'}>
-        {state.kind === 'sending' ? 'Sending…' : 'Request a demo'}
+        {state.kind === 'sending' ? 'Sending…' : 'Book a demo'}
       </Button>
     </form>
   );
