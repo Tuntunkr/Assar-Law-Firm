@@ -18,6 +18,7 @@ export const PERMISSIONS = [
   'calendar:write',
   'ai:use',
   'ai:approve',
+  'assistant:use',
   'billing:read',
   'billing:write',
   'audit:read',
@@ -94,6 +95,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'calendar:write',
     'ai:use',
     'ai:approve',
+    'assistant:use',
     'portal:manage',
     'time:write',
   ],
@@ -108,10 +110,18 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'task:write',
     'calendar:write',
     'ai:use',
+    'assistant:use',
     'time:write',
   ],
-  billing: ['client:read', 'matter:read', 'billing:read', 'billing:write'],
-  staff: ['client:read', 'matter:read', 'document:read', 'task:write', 'calendar:write'],
+  billing: ['client:read', 'matter:read', 'billing:read', 'billing:write', 'assistant:use'],
+  staff: [
+    'client:read',
+    'matter:read',
+    'document:read',
+    'task:write',
+    'calendar:write',
+    'assistant:use',
+  ],
 };
 
 export function hasPermission(role: Role, permission: Permission): boolean {
@@ -245,3 +255,4 @@ export function taxAmountCents(amountCents: number, rateBp: number): number {
 }
 export * from './templates.js';
 export * from './reminders.js';
+export * from './assistant.js';

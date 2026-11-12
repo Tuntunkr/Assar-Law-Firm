@@ -12,6 +12,7 @@ export const NAV: { group: string; items: NavItem[] }[] = [
     group: 'Main',
     items: [
       { to: '/', label: 'Dashboard', icon: 'dashboard' },
+      { to: '/ask', label: 'Ask Assar', icon: 'ai', perm: 'assistant:use' },
       { to: '/calendar', label: 'Calendar', icon: 'calendar', perm: 'calendar:write' },
       { to: '/tasks', label: 'Tasks', icon: 'tasks', perm: 'task:write' },
     ],
@@ -23,7 +24,6 @@ export const NAV: { group: string; items: NavItem[] }[] = [
       { to: '/matters', label: 'Matters', icon: 'matters', perm: 'matter:read' },
       { to: '/documents', label: 'Documents', icon: 'documents', perm: 'document:read' },
       { to: '/templates', label: 'Templates', icon: 'documents', perm: 'document:read' },
-      { to: '/ai', label: 'AI Copilot', icon: 'ai', perm: 'ai:use' },
       { to: '/conflicts', label: 'Conflict check', icon: 'conflicts', perm: 'conflict:check' },
     ],
   },

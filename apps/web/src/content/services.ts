@@ -17,8 +17,8 @@ export const services: Feature[] = [
     body: 'Organizations, teams, roles, clients, matters, calendar and tasks in one workspace.',
   },
   {
-    title: 'AI Legal Copilot',
-    body: 'Summaries, drafting, extraction and document Q&A that always arrive as drafts for lawyer review.',
+    title: 'Ask Assar',
+    body: 'One assistant for the dashboard and for document drafts. Drafts stay drafts until a lawyer reviews them.',
   },
   {
     title: 'Document & contract intelligence',
@@ -69,8 +69,8 @@ export const productPages: Record<string, ProductPage> = {
   },
   'ai-legal-copilot': {
     slug: 'ai-legal-copilot',
-    title: 'AI Legal Copilot',
-    summary: 'AI assistance that stays inside your source material and under lawyer control.',
+    title: 'Ask Assar',
+    summary: 'One assistant for dashboard help and document drafts, kept under lawyer control.',
     features: [
       {
         title: 'Matter & document summaries',
@@ -89,7 +89,7 @@ export const productPages: Record<string, ProductPage> = {
       { title: 'Missing-information checklists', body: 'Identify what a file still needs.' },
     ],
     guardrail:
-      'Every AI result is labeled as an unverified draft until a person reviews it. The Copilot is not a lawyer and does not provide legal advice. It must not be relied on for legal citations, case facts or deadlines without verification.',
+      'Every AI result is labeled as an unverified draft until a person reviews it. Ask Assar is not a lawyer and does not provide legal advice. It must not be relied on for legal citations, case facts or deadlines without verification.',
   },
   'document-intelligence': {
     slug: 'document-intelligence',
@@ -160,7 +160,7 @@ export const howItWorks: Feature[] = [
     body: 'Add clients, matters and upload documents to private storage.',
   },
   {
-    title: 'Ask the Copilot',
+    title: 'Ask Assar',
     body: 'Request a summary, chronology or draft from authorized sources.',
   },
   {

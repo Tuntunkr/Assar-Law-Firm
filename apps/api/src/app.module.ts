@@ -5,6 +5,8 @@ import type { DestinationStream } from 'pino';
 import { PrincipalRateLimitGuard, RATE_LIMIT_STORAGE } from './security/rate-limit.guard';
 import { RedisThrottlerStorage } from './security/redis-throttler.storage';
 import { AiModule } from './ai/ai.module';
+import { AssistantModule } from './assistant/assistant.module';
+import { ASSISTANT_COMPOSER, defaultComposer, type Composer } from './assistant/assistant.service';
 import { AutomationModule } from './automation/automation.module';
 import { AuditModule } from './audit/audit.module';
 import { AuthModule } from './auth/auth.module';
@@ -35,7 +37,10 @@ import { TimelineModule } from './timeline/timeline.module';
 
 @Module({})
 export class AppModule {
-  static forRoot(env: Env, options: { logDestination?: DestinationStream } = {}): DynamicModule {
+  static forRoot(
+    env: Env,
+    options: { logDestination?: DestinationStream; composer?: Composer } = {},
+  ): DynamicModule {
     const logger = createLogger(env.LOG_LEVEL, options.logDestination);
     // Counters live in Redis so limits hold across all API replicas.
     const storage = new RedisThrottlerStorage(env.REDIS_URL, env.QUEUE_PREFIX, logger);
@@ -70,12 +75,14 @@ export class AppModule {
         BillingModule,
         TimelineModule,
         TemplatesModule,
+        AssistantModule,
       ],
       controllers: [HealthController],
       providers: [
         { provide: ENV, useValue: env },
         { provide: LOGGER, useValue: logger },
         { provide: RATE_LIMIT_STORAGE, useValue: storage },
+        { provide: ASSISTANT_COMPOSER, useValue: options.composer ?? defaultComposer },
         { provide: APP_FILTER, useClass: AllExceptionsFilter },
         { provide: APP_GUARD, useClass: ThrottlerGuard },
         { provide: APP_GUARD, useClass: AuthGuard },
@@ -83,7 +90,7 @@ export class AppModule {
         { provide: APP_GUARD, useClass: PermissionsGuard },
         { provide: APP_INTERCEPTOR, useClass: IdempotencyInterceptor },
       ],
-      exports: [ENV, LOGGER],
+      exports: [ENV, LOGGER, ASSISTANT_COMPOSER],
     };
   }
 }

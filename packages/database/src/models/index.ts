@@ -1,5 +1,5 @@
 import mongoose, { type Model, type Types } from 'mongoose';
-import type { Role } from '@assar/types';
+import type { AssistantRoute, Role } from '@assar/types';
 
 // Default import: named runtime imports from this CJS package fail under Node's native ESM loader.
 const { Schema, model, models } = mongoose;
@@ -1241,3 +1241,55 @@ invoiceSchema.index({ organizationId: 1, _id: -1 });
 invoiceSchema.index({ organizationId: 1, status: 1, dueAt: 1 });
 invoiceSchema.index({ organizationId: 1, clientId: 1, _id: -1 });
 export const InvoiceModel = define<InvoiceDoc>('Invoice', invoiceSchema);
+
+// ---- Ask Assar: each thread belongs to one user inside their organization ----
+export interface AssistantThreadDoc {
+  _id: Id;
+  organizationId: Id;
+  userId: Id;
+  title: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+const assistantThreadSchema = new Schema<AssistantThreadDoc>(
+  {
+    organizationId: { type: Schema.Types.ObjectId, required: true },
+    userId: { type: Schema.Types.ObjectId, required: true },
+    title: { type: String, required: true, trim: true, maxlength: 200 },
+  },
+  { timestamps: true, collection: 'assistant_threads' },
+);
+assistantThreadSchema.index({ organizationId: 1, userId: 1, updatedAt: -1 });
+export const AssistantThreadModel = define<AssistantThreadDoc>(
+  'AssistantThread',
+  assistantThreadSchema,
+);
+
+export interface AssistantMessageDoc {
+  _id: Id;
+  organizationId: Id;
+  threadId: Id;
+  role: 'user' | 'assistant';
+  body: string;
+  route?: AssistantRoute | null;
+  toolName?: string | null;
+  proposal?: unknown;
+  createdAt: Date;
+}
+const assistantMessageSchema = new Schema<AssistantMessageDoc>(
+  {
+    organizationId: { type: Schema.Types.ObjectId, required: true },
+    threadId: { type: Schema.Types.ObjectId, required: true },
+    role: { type: String, enum: ['user', 'assistant'], required: true },
+    body: { type: String, required: true, maxlength: 20_000 },
+    route: { type: String, enum: ['help', 'lookup', 'action', 'refuse', null], default: null },
+    toolName: { type: String, maxlength: 100, default: null },
+    proposal: { type: Schema.Types.Mixed, default: null },
+  },
+  { timestamps: { createdAt: true, updatedAt: false }, collection: 'assistant_messages' },
+);
+assistantMessageSchema.index({ organizationId: 1, threadId: 1, createdAt: 1 });
+export const AssistantMessageModel = define<AssistantMessageDoc>(
+  'AssistantMessage',
+  assistantMessageSchema,
+);

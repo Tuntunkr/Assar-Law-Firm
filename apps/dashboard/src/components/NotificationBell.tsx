@@ -8,7 +8,7 @@ const ROUTE: Record<string, string> = {
   task: '/tasks',
   event: '/calendar',
   matter: '/matters',
-  ai_output: '/ai',
+  ai_output: '/ask',
   document: '/matters',
 };
 

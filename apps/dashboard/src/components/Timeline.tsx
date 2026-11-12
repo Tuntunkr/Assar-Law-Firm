@@ -26,7 +26,7 @@ const FALLBACK = { icon: 'calendar' as IconName, tint: 'bg-red-50 text-red-600' 
 const LINK: Record<string, (id: string) => string> = {
   matter: (id) => `/matters/${id}`,
   invoice: (id) => `/invoices/${id}`,
-  ai_output: () => '/ai',
+  ai_output: () => '/ask',
 };
 
 /** A history of what happened on one matter, or across all of a client's matters. */

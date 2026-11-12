@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Container } from '@assar/ui';
 import { PageHero } from '@/components/PageHero';
+import { pageImagery } from '@/content/imagery';
 import { faqs } from '@/content/faq';
 
 export const metadata: Metadata = {
@@ -14,6 +15,7 @@ export default function Page() {
       <PageHero
         title="Frequently asked questions"
         summary="Straight answers about AI, access and security."
+        image={pageImagery.faq}
       />
       <Container className="max-w-3xl py-16">
         <div className="divide-y divide-navy-100 rounded-xl border border-navy-100">

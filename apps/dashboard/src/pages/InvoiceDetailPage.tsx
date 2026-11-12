@@ -1,4 +1,5 @@
-import { PAYMENT_METHODS } from '@assar/types';
+import type { InvoiceDto } from '@assar/api-client';
+import { PAYMENT_METHODS, REMINDER_CHANNELS, type ReminderChannel } from '@assar/types';
 import {
   Alert,
   Button,
@@ -9,6 +10,7 @@ import {
   StatusPill,
   Table,
   Td,
+  TextAreaField,
   TextField,
   Th,
 } from '@assar/ui';
@@ -211,6 +213,14 @@ export function InvoiceDetailPage() {
                 </dl>
               </Card>
             </div>
+            {inv.status === 'issued' && inv.balanceCents > 0 && inv.dueAt && (
+              <PaymentReminder
+                invoiceId={id}
+                reminders={inv.reminders}
+                write={write}
+                onLogged={() => state.reload()}
+              />
+            )}
 
             <Modal
               open={dialog === 'line'}
@@ -368,5 +378,106 @@ export function InvoiceDetailPage() {
         );
       }}
     </AsyncView>
+  );
+}
+
+function PaymentReminder({
+  invoiceId,
+  reminders,
+  write,
+  onLogged,
+}: {
+  invoiceId: string;
+  reminders: InvoiceDto['reminders'];
+  write: boolean;
+  onLogged: () => void;
+}) {
+  const { client } = useAuth();
+  const draft = useAsync(() => client.invoiceReminderDraft(invoiceId), [client, invoiceId]);
+  const act = useAction();
+  const [channel, setChannel] = useState<ReminderChannel>('phone');
+  const [note, setNote] = useState('');
+
+  return (
+    <Card>
+      <h2 className="mb-1 font-semibold text-navy-900">Payment reminder</h2>
+      <p className="mb-4 text-sm text-navy-600">
+        Email and WhatsApp are not connected. Copy this message, send it yourself, then record how
+        you sent it.
+      </p>
+      <AsyncView
+        state={draft}
+        onRetry={draft.reload}
+        skeleton={<div className="h-24 animate-pulse rounded-xl bg-navy-100" />}
+      >
+        {(row) => (
+          <form
+            className="space-y-4"
+            onSubmit={async (e) => {
+              e.preventDefault();
+              if (!write) return;
+              const saved = await act.run(
+                () =>
+                  client.logInvoiceReminder(invoiceId, {
+                    channel,
+                    ...(note.trim() ? { note: note.trim() } : {}),
+                  }),
+                'Reminder recorded',
+              );
+              if (saved) {
+                setNote('');
+                onLogged();
+              }
+            }}
+          >
+            <TextAreaField
+              id="reminder-text"
+              label="Message to send"
+              value={row.text}
+              readOnly
+            />
+            {write && (
+              <>
+                <SelectField
+                  id="reminder-channel"
+                  label="How you sent it"
+                  value={channel}
+                  onChange={(e) => setChannel(e.target.value as ReminderChannel)}
+                >
+                  {REMINDER_CHANNELS.map((c) => (
+                    <option key={c} value={c}>
+                      {label(c)}
+                    </option>
+                  ))}
+                </SelectField>
+                <TextField
+                  id="reminder-note"
+                  label="Note"
+                  value={note}
+                  onChange={(e) => setNote(e.target.value)}
+                  hint="Optional. A short record of the conversation."
+                />
+                <div className="flex justify-end">
+                  <Button type="submit" loading={act.busy}>
+                    Record reminder
+                  </Button>
+                </div>
+              </>
+            )}
+          </form>
+        )}
+      </AsyncView>
+      {reminders.length > 0 && (
+        <ul className="mt-4 divide-y divide-navy-50 text-sm">
+          {reminders.map((r) => (
+            <li key={r.id} className="py-2">
+              <span className="font-medium text-navy-900">{label(r.channel)}</span>
+              <span className="text-navy-600"> · {formatDate(r.at)}</span>
+              {r.note ? <p className="text-navy-700">{r.note}</p> : null}
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
   );
 }

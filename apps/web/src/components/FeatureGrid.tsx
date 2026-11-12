@@ -1,15 +1,14 @@
-import { Card } from '@assar/ui';
 import type { Feature } from '@/content/services';
 
-export function FeatureGrid({ items, cols = 3 }: { items: Feature[]; cols?: 2 | 3 }) {
+export function FeatureGrid({ items }: { items: Feature[]; cols?: 2 | 3 }) {
   return (
-    <ul className={`grid gap-5 sm:grid-cols-2 ${cols === 3 ? 'lg:grid-cols-3' : ''}`}>
-      {items.map((f) => (
-        <li key={f.title}>
-          <Card className="h-full">
-            <h3 className="text-base font-semibold text-navy-900">{f.title}</h3>
-            <p className="mt-2 text-sm leading-6 text-navy-700">{f.body}</p>
-          </Card>
+    <ul className="grid gap-x-16 md:grid-cols-2">
+      {items.map((item) => (
+        <li key={item.title} className="border-t border-[var(--line)] py-5">
+          <h3 className="text-2xl leading-tight">{item.title}</h3>
+          <p className="mt-2 max-w-[48ch] text-[15px] leading-relaxed text-[var(--muted)]">
+            {item.body}
+          </p>
         </li>
       ))}
     </ul>

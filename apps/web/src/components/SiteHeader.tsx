@@ -2,82 +2,72 @@
 
 import Link from 'next/link';
 import { useState } from 'react';
-import { ButtonLink, Container } from '@assar/ui';
 import { nav, site } from '@/content/site';
 
 export function SiteHeader() {
   const [open, setOpen] = useState(false);
   return (
-    <header className="sticky top-0 z-40 border-b border-navy-100 bg-white/90 backdrop-blur">
+    <header className="sticky top-0 z-40 border-b border-[var(--line)] bg-[var(--paper)]/95 backdrop-blur">
       <a
         href="#main"
-        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:rounded focus:bg-white focus:px-3 focus:py-2"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:bg-[var(--surface)] focus:px-3 focus:py-2"
       >
         Skip to content
       </a>
-      <Container className="flex h-16 items-center justify-between">
-        <Link href="/" className="text-lg font-semibold tracking-tight text-navy-900">
+      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-5 sm:px-8">
+        <Link href="/" className="font-display text-xl tracking-tight text-[var(--ink)]">
           {site.name}
         </Link>
         <nav aria-label="Primary" className="hidden items-center gap-6 lg:flex">
-          {nav.map((n) => (
+          {nav.map((item) => (
             <Link
-              key={n.href}
-              href={n.href}
-              className="text-sm font-medium text-navy-700 hover:text-navy-950"
+              key={item.href}
+              href={item.href}
+              className="text-sm text-[var(--muted)] hover:text-[var(--ink)]"
             >
-              {n.label}
+              {item.label}
             </Link>
           ))}
         </nav>
-        <div className="hidden items-center gap-3 lg:flex">
-          <Link href="/login" className="text-sm font-medium text-navy-700 hover:text-navy-950">
+        <div className="hidden items-center gap-5 lg:flex">
+          <Link href="/login" className="text-sm text-[var(--muted)] hover:text-[var(--ink)]">
             Login
           </Link>
-          <ButtonLink href="/contact">Book a Demo</ButtonLink>
+          <Link href="/contact" className="site-btn">
+            Book a demo
+          </Link>
         </div>
         <button
           type="button"
-          className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-navy-200 lg:hidden"
+          className="inline-flex h-10 w-10 items-center justify-center border border-[var(--line)] lg:hidden"
           aria-expanded={open}
           aria-controls="mobile-nav"
           aria-label={open ? 'Close menu' : 'Open menu'}
           onClick={() => setOpen((v) => !v)}
         >
-          <svg
-            width="20"
-            height="20"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            aria-hidden="true"
-          >
-            {open ? <path d="M6 6l12 12M18 6L6 18" /> : <path d="M4 7h16M4 12h16M4 17h16" />}
-          </svg>
+          <span className="sr-only">{open ? 'Close' : 'Menu'}</span>
+          <span aria-hidden="true" className="text-lg leading-none">
+            {open ? '×' : '☰'}
+          </span>
         </button>
-      </Container>
+      </div>
       {open && (
-        <nav
-          id="mobile-nav"
-          aria-label="Mobile"
-          className="border-t border-navy-100 bg-white lg:hidden"
-        >
-          <Container className="flex flex-col gap-1 py-4">
-            {[...nav, { href: '/login', label: 'Login' }].map((n) => (
+        <nav id="mobile-nav" aria-label="Mobile" className="border-t border-[var(--line)] lg:hidden">
+          <div className="mx-auto flex max-w-6xl flex-col gap-1 px-5 py-4">
+            {[...nav, { href: '/login', label: 'Login' }].map((item) => (
               <Link
-                key={n.href}
-                href={n.href}
+                key={item.href}
+                href={item.href}
                 onClick={() => setOpen(false)}
-                className="rounded-lg px-3 py-2 text-base font-medium text-navy-800 hover:bg-navy-50"
+                className="px-1 py-2 text-base text-[var(--ink)]"
               >
-                {n.label}
+                {item.label}
               </Link>
             ))}
-            <ButtonLink href="/contact" className="mt-2" onClick={() => setOpen(false)}>
-              Book a Demo
-            </ButtonLink>
-          </Container>
+            <Link href="/contact" className="site-btn mt-3" onClick={() => setOpen(false)}>
+              Book a demo
+            </Link>
+          </div>
         </nav>
       )}
     </header>

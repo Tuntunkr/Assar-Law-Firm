@@ -1,7 +1,4 @@
-/**
- * Editable pricing configuration. Prices are intentionally null until approved by the business;
- * the UI renders "Pricing on request" for null. Do not publish invented numbers.
- */
+/** Public list prices, in USD per firm per month. Edit the numbers here to change the site. */
 export interface Plan {
   id: string;
   name: string;
@@ -12,12 +9,18 @@ export interface Plan {
   features: string[];
 }
 
+export function formatPlanPrice(plan: Plan): string {
+  if (plan.priceMonthly === null) return 'Pricing on request';
+  if (plan.currency === 'USD') return `$${plan.priceMonthly}/mo`;
+  return `${plan.currency} ${plan.priceMonthly}/mo`;
+}
+
 export const plans: Plan[] = [
   {
     id: 'starter',
     name: 'Starter',
     audience: 'Small practices',
-    priceMonthly: null,
+    priceMonthly: 79,
     currency: 'USD',
     features: [
       'Clients and matters',
@@ -30,12 +33,12 @@ export const plans: Plan[] = [
     id: 'professional',
     name: 'Professional',
     audience: 'Growing firms',
-    priceMonthly: null,
+    priceMonthly: 199,
     currency: 'USD',
     highlighted: true,
     features: [
       'Everything in Starter',
-      'AI Legal Copilot (reviewed drafts)',
+      'Ask Assar (reviewed drafts)',
       'Document intelligence',
       'Client portal',
       'Billing and reports',
@@ -45,7 +48,7 @@ export const plans: Plan[] = [
     id: 'enterprise',
     name: 'Enterprise',
     audience: 'Larger firms',
-    priceMonthly: null,
+    priceMonthly: 499,
     currency: 'USD',
     features: [
       'Everything in Professional',

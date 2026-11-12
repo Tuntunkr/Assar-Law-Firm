@@ -7,6 +7,6 @@ import { MattersService } from './matters.service';
 @Module({
   controllers: [MattersController],
   providers: [MattersService, MatterAccessService],
-  exports: [MatterAccessService],
+  exports: [MatterAccessService, MattersService],
 })
 export class MattersModule {}

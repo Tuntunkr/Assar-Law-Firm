@@ -39,6 +39,11 @@ function makeClient(over: Partial<Record<keyof StaffClient, unknown>> = {}) {
     tasks: vi.fn().mockResolvedValue(emptyPage),
     events: vi.fn().mockResolvedValue(emptyPage),
     aiOutputs: vi.fn().mockResolvedValue(emptyPage),
+    assistantThreads: vi.fn().mockResolvedValue({ data: [] }),
+    assistantThread: vi.fn().mockResolvedValue({ messages: [] }),
+    createAssistantThread: vi.fn(),
+    sendAssistantMessage: vi.fn(),
+    confirmAssistant: vi.fn(),
     matters: vi.fn().mockResolvedValue(emptyPage),
     clients: vi.fn().mockResolvedValue(emptyPage),
     documents: vi.fn().mockResolvedValue(emptyPage),
@@ -506,7 +511,7 @@ describe('AI client summary and job list', () => {
   });
   const ai: StaffMe = {
     ...attorney,
-    permissions: [...attorney.permissions, 'ai:use', 'matter:read'],
+    permissions: [...attorney.permissions, 'ai:use', 'assistant:use', 'matter:read'],
   };
 
   it('requests a summary and reports the real job progress until it finishes', async () => {
@@ -596,7 +601,8 @@ describe('AI client summary and job list', () => {
       }),
     });
     const user = userEvent.setup();
-    renderApp(client, '/ai');
+    renderApp(client, '/ask');
+    await user.click(await screen.findByRole('tab', { name: 'Drafts' }));
     await user.click(await screen.findByRole('tab', { name: 'Jobs' }));
     expect(await screen.findByText('The model could not be reached')).toBeInTheDocument();
   });
