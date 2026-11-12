@@ -1,4 +1,4 @@
-import type { Page, Permission, Role } from '@assar/types';
+import type { Page, Permission, ReminderChannel, Role } from '@assar/types';
 import { Http, type ClientOptions, type DownloadLink } from './index.js';
 
 // ---- DTOs: mirror the shapes the API returns (see the *Dto functions in apps/api) ----
@@ -320,6 +320,18 @@ export interface InvoiceDto extends InvoiceSummaryDto {
     method: string;
     reference: string | null;
   }[];
+  reminders: {
+    id: string;
+    at: string;
+    channel: ReminderChannel;
+    note: string | null;
+    by: string;
+  }[];
+}
+export interface InvoiceReminderDraftDto {
+  daysPastDue: number;
+  step: number | null;
+  text: string;
 }
 export interface BillingSettingsDto {
   currency: string;
@@ -601,6 +613,10 @@ export function createStaffClient(options: ClientOptions) {
     deleteTimeEntry: (id: string) => del(`/time-entries/${id}`),
     invoices: (q?: Q): L<InvoiceSummaryDto> => get('/invoices', q),
     invoice: (id: string) => get<InvoiceDto>(`/invoices/${id}`),
+    invoiceReminderDraft: (id: string) =>
+      get<InvoiceReminderDraftDto>(`/invoices/${id}/reminder-draft`),
+    logInvoiceReminder: (id: string, b: { channel: ReminderChannel; note?: string }) =>
+      post<InvoiceDto>(`/invoices/${id}/reminders`, b),
     createInvoice: (b: Record<string, unknown>) => post<InvoiceDto>('/invoices', b, idem()),
     updateInvoice: (id: string, b: Record<string, unknown>) =>
       patch<InvoiceDto>(`/invoices/${id}`, b),

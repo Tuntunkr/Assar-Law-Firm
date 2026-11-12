@@ -227,7 +227,7 @@ export function OverviewPage() {
                     hint="Waiting for an attorney"
                     icon="ai"
                     tint="bg-amber-50 text-amber-600"
-                    to="/ai"
+                    to="/ask"
                   />
                 ) : null}
               </div>
@@ -357,7 +357,7 @@ export function OverviewPage() {
                   </Panel>
                 )}
                 {drafts && drafts.data.length > 0 && (
-                  <Panel title="AI drafts waiting for review" to="/ai" linkText="Open queue">
+                  <Panel title="AI drafts waiting for review" to="/ask" linkText="Open queue">
                     <ul className="divide-y divide-navy-50 text-sm">
                       {drafts.data.map((d) => (
                         <li key={d.id} className="flex justify-between py-2.5">

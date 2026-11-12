@@ -1,5 +1,5 @@
 import type { AiOutputDto } from '@assar/api-client';
-import { Button, PageHeader, SelectField, StatusPill, Table, Tabs, Td, Th } from '@assar/ui';
+import { Button, SelectField, StatusPill, Table, Tabs, Td, Th } from '@assar/ui';
 import { useState } from 'react';
 import { AiReviewModal } from '../components/AiReviewModal';
 import { EmptyState } from '../components/AsyncView';
@@ -9,14 +9,11 @@ import { formatDateTime, label, toneOf } from '../lib/format';
 import { useAction } from '../lib/useAction';
 import { usePaged } from '../lib/usePaged';
 
+/** Document drafts and the jobs that produce them. Shown inside Ask Assar for roles with ai:use. */
 export function AiPage() {
   const [tab, setTab] = useState<'review' | 'jobs'>('review');
   return (
     <>
-      <PageHeader
-        title="AI Copilot"
-        description="Every output is a draft until an attorney reviews and approves it."
-      />
       <Tabs
         label="AI sections"
         value={tab}

@@ -1,11 +1,10 @@
 import type { ReactNode } from 'react';
 import type { Permission } from '@assar/types';
-import { Route, Routes } from 'react-router-dom';
+import { Navigate, Route, Routes } from 'react-router-dom';
 import { AppShell } from './components/AppShell';
 import { RequireAuth, RequirePermission } from './components/RequireAuth';
 import { PeopleProvider } from './lib/people';
 import { AcceptInvitePage } from './pages/AcceptInvitePage';
-import { AiPage } from './pages/AiPage';
 import { AskPage } from './pages/AskPage';
 import { AuditPage } from './pages/AuditPage';
 import { CalendarPage } from './pages/CalendarPage';
@@ -60,7 +59,7 @@ export function AppRoutes() {
           <Route path="templates" element={guard('document:read', <TemplatesPage />)} />
           <Route path="tasks" element={guard('task:write', <TasksPage />)} />
           <Route path="calendar" element={guard('calendar:write', <CalendarPage />)} />
-          <Route path="ai" element={guard('ai:use', <AiPage />)} />
+          <Route path="ai" element={<Navigate to="/ask" replace />} />
           <Route path="conflicts" element={guard('conflict:check', <ConflictsPage />)} />
           <Route path="time" element={guard('time:write', <TimePage />)} />
           <Route path="invoices" element={guard('billing:read', <InvoicesPage />)} />

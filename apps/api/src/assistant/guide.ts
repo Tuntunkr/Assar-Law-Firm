@@ -53,9 +53,9 @@ export const guideChunks: readonly GuideChunk[] = [
   },
   {
     id: 'ai',
-    title: 'AI Copilot',
+    title: 'Document drafts',
     permission: 'ai:use',
-    text: 'AI Copilot reads documents you already stored and drafts a chronology, a summary, or a clause note. Every result stays a draft until a person approves it.',
+    text: 'Ask Assar reads documents you already stored and drafts a chronology, a summary, or a clause note. Open Ask Assar and choose Drafts. Every result stays a draft until a person approves it.',
   },
   {
     id: 'conflicts',

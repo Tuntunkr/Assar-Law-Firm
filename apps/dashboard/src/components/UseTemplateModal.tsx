@@ -108,12 +108,12 @@ export function UseTemplateModal({
           documents: aiDocs.map((documentId) => ({ documentId })),
           instructions,
         }),
-      'Sent to the AI. The result will wait for your review in AI Copilot.',
+      'Sent to Ask Assar. The result will wait in Drafts until a person approves it.',
     );
     if (job)
       setNote({
         tone: 'info',
-        text: 'The AI is working on it. Open AI Copilot to review the draft when it is ready.',
+        text: 'Ask Assar is working on it. Open Drafts when the result is ready.',
       });
   }
 

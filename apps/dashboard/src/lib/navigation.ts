@@ -24,7 +24,6 @@ export const NAV: { group: string; items: NavItem[] }[] = [
       { to: '/matters', label: 'Matters', icon: 'matters', perm: 'matter:read' },
       { to: '/documents', label: 'Documents', icon: 'documents', perm: 'document:read' },
       { to: '/templates', label: 'Templates', icon: 'documents', perm: 'document:read' },
-      { to: '/ai', label: 'AI Copilot', icon: 'ai', perm: 'ai:use' },
       { to: '/conflicts', label: 'Conflict check', icon: 'conflicts', perm: 'conflict:check' },
     ],
   },
