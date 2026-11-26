@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document id | ASSAR-PRD-2026-11-08 |
-| Version | 1.0.4 |
+| Version | 1.0.5 |
 | Cutoff | 8 Nov 2026, 10:23 IST. Later notes in this file are labelled with the clock time they were verified on this worker. |
 | Owner | Tuntunkr |
 | Repository | Tuntunkr/Assar-Law-Firm |
@@ -165,6 +165,26 @@ Staff and portal nav links on the recaptured screens were at least 44px. Portal 
 
 Still open after this section: the owner’s machine, owner UAT, merge, deploy, a pull request, a restored backup, a payment gateway, live court, live WhatsApp, SMTP, and production n8n. MongoDB on 27119 still has no server user. Application argon2id is not database authentication. Extra synthetic rows remain, including the repeated tasks and the second scanned note. WIMO marketing was not touched.
 
+### 4.4 Pending local polish, 26 Nov 2026
+
+Implementation commit `c2d424e00e3704bd963132d4b5b669013817f20d`. Branch `cursor/pending-local-polish-d89d`. Design and plan: `docs/superpowers/specs/2026-11-26-pending-local-polish-design.md`, `docs/superpowers/plans/2026-11-26-pending-local-polish.md`. Live providers, the payment gateway, merge, deploy, and the PR collaborator workaround stayed closed.
+
+Hearing outcome no longer uses `window.prompt`. The calendar page opens the existing Modal with a result select (`HEARING_RESULTS`), notes, and an optional next-hearing date.
+
+Editing an approved or pending date now returns it to `draft` (clears `approvedBy` / `approvedAt`). A closed date stays 409. An API test covers approve → edit → draft → submit → approve again, and a closed edit refusal.
+
+Intern revoke: assign via task → clear open assignee → PUT access without the intern → matter 404 and empty task list. Signed download key-swap 403 was re-run in `documents.test.ts`.
+
+Focused checks this pass (not a re-run of the older 300+6 API suite):
+
+- `pnpm --filter @assar/api exec vitest run test/practice-modules.test.ts test/documents.test.ts`. Exit 0. 2 files, 26 tests.
+- `pnpm --filter @assar/dashboard exec vitest run`. Exit 0. 3 files, 38 tests.
+- Dashboard and API typecheck exit 0.
+
+Backup restore proof on the owned mongod at `127.0.0.1:27117` only: synthetic DB `assar_backup_source` (matters 1, documents 1) → encrypted dump under `.data/backup-proof/` → restore into empty `assar_backup_verify` → counts matched (`OK: 2 collections, 2 documents`). Both proof databases were dropped afterward. This is not a production backup certificate and did not touch a demo journey database.
+
+Still open: owner machine UAT, pull request, merge, deploy, payment gateway, live court, live WhatsApp, SMTP, production n8n, MongoDB server auth on demo hosts.
+
 ## 5. Users and the permission map
 
 Staff roles in `packages/types/src/index.ts` are `owner`, `admin`, `attorney`, `paralegal`, `billing`, `staff`, and `intern`. There is no staff role named `client`. A portal user is a `ClientUser` with a separate cookie.
@@ -235,7 +255,7 @@ Depends on: a human, and later an authorised provider agreement if one ever exis
 
 Purpose: a manual calendar. A hearing can hold an outcome draft. A lawyer reviews it. The next hearing is created only when a lawyer asks, at a chosen 10:00 IST instant, not a time read from a court.
 
-Status: BRANCH-IMPLEMENTED. The outcome dialog in the dashboard still uses `window.prompt`. That is a known rough edge, not a legal feature.
+Status: BRANCH-IMPLEMENTED. The calendar outcome form uses the staff Modal (result, notes, optional next date). It is still a typed note, not a filing.
 
 Workflow: W2.
 
@@ -339,7 +359,7 @@ Acceptance: see section 12. Publication as an advertisement still needs an advoc
 
 Purpose: a restricted matter is an access list. Audit rows record actor, action, and target. Break-glass is not a hidden superuser password in this tree; access is an explicit grant. Backup scripts exist (`scripts/backup-mongo.sh`, `backup-prune.sh`, `backup-verify.sh`, `restore-mongo.sh`). A script’s existence is not a restored-backup guarantee. No production backup has been restored in this work.
 
-Status: BRANCH-IMPLEMENTED for access rows, audit, and rate limits. Restore proof is UNKNOWN.
+Status: BRANCH-IMPLEMENTED for access rows, audit, and rate limits. A disposable restore on the owned local mongod matched counts (section 4.4). That is not a production restore certificate.
 
 ### 6.15 Group 3, still gated
 
@@ -722,13 +742,13 @@ US accounting exports are not Indian tax compliance. Other names from the 7 Nov 
 | 15 | Hearing outcome by a paralegal, review by an attorney | Draft, then reviewed | Cloud journey, section 4.2. Paralegal review 403. Attorney review 201. |
 | 16 | Schedule next | One manual hearing at the chosen IST instant | Cloud journey, section 4.2. Not a limitation calculation. |
 | 17 | Deadline approve by intern or paralegal | 403 | Cloud journey, section 4.2. Both 403. Attorney approve 201. |
-| 18 | Deadline edit after approval | Needs approval again | REQUIREMENT. Confirm in the next test pass; not re-run here. |
+| 18 | Deadline edit after approval | Needs approval again | Section 4.4. Approved → PATCH → `draft`; submit and approve again. Closed edit 409. |
 | 19 | No route computes a limitation period | Absent | BRANCH-IMPLEMENTED by absence. Not a certificate. |
 | 20 | Upload executable type or a path-like name | 400, name sanitised | Cloud journey rejected the executable with 400. Path sanitising was the section 4.1 check, not repeated as a second file. |
 | 21 | Scanner cannot run | Not marked clean | Section 4.2 file stayed `skipped` and unshared. Section 4.3 used ClamAV on this worker: a new text file became `clean` and was shared; EICAR stayed `infected` and unshared. A missing daemon still fails closed. |
-| 22 | Signed download for another object | Rejected | REQUIREMENT. Not re-run as a dedicated case in this pass. |
+| 22 | Signed download for another object | Rejected | Section 4.4 re-ran `documents.test.ts` signed-URL security (key swap 403). |
 | 23 | Intern sees only the assigned matter | Other matter 404 | Cloud journey API 404 and the staff screen “you do not have access.” |
-| 24 | Intern revoked | Access gone | REQUIREMENT. Not re-run here. |
+| 24 | Intern revoked | Access gone | Section 4.4. Clear open assignee, replace access, matter 404. |
 | 25 | Outbox without consent | Rejected | Historical. Not re-run. |
 | 26 | Approve with mock provider | `mock_delivered`, no socket | Cloud journey. Provider `mock`. No socket. |
 | 27 | Approve with provider unset | `external_activation_gate` | Historical. Not re-run. |
@@ -750,7 +770,7 @@ US accounting exports are not Indian tax compliance. Other names from the 7 Nov 
 | 43 | Restart mongod and read the same synthetic document | Still present | Section 4.2. Journey matter and 23-byte file survived. Foreign `/tmp/mongo-data` was not restarted. |
 | 44 | Full browser journey: intake, matter, private file, hearing, deadline, intern denial, mock message, INR invoice, manual payment, portal | Each step on one running stack | Cloud-local pass, section 4.2, plus the name and scanned-file screens in section 4.3. The original upload stays unshared. A later ClamAV-clean file is on the portal. Not owner UAT. |
 | 45 | Owner UAT | Signed by the owner | NOT-RUN. |
-| 46 | Restore a backup and verify | Counts match | NOT-RUN. Script exists only. |
+| 46 | Restore a backup and verify | Counts match | Section 4.4 disposable DBs on owned 27117: 2 collections / 2 documents matched, then dropped. Not production. |
 | 47 | Payment gateway charge | Must not exist | Confirmed absent. Deferred. |
 | 48 | Merge and production deploy | Not performed | Gate remains. |
 
@@ -794,7 +814,7 @@ Still blocking a production claim:
 - Remote CI on the branch, which is UNKNOWN.
 - Owner UAT.
 - A separate merge approval and a separate deploy approval.
-- A backup that has been restored and checked.
+- A production backup that has been restored and checked. A disposable local restore was recorded in section 4.4 only.
 
 These blockers are not a reason to stop local work that does not need them. The next session should keep going on the localhost journey and the matrix rows marked NOT-RUN.
 
@@ -833,6 +853,7 @@ This PRD does not authorise new application behaviour. Implementation continues 
 | 1.0.2 | 8 Nov 2026 | Record the cloud-localhost checks from the continuation. Not owner UAT. Not a security or legal certificate. The code commit is named in section 4.1. |
 | 1.0.3 | 8 Nov 2026 | Record the connected cloud-local journey, the 44px staff and portal measurements, the owned data directories, and the fresh production build. Implementation commit `b98c20a37d24c7f47b7cefb54f980dd82089e905`. Not owner UAT. Not a security or legal certificate. |
 | 1.0.4 | 8 Nov 2026 | Record matter and task names without a member directory, and a ClamAV scan on this worker only. Implementation commit `259a565b037366595856566b4d845fc4f39b9bc7`. The earlier 300 passed and 6 skipped API run was not repeated. Not owner UAT. Not a security or legal certificate. |
+| 1.0.5 | 26 Nov 2026 | Pending local polish: hearing outcome Modal, deadline re-approval after edit, intern revoke test, signed-download re-run, disposable backup restore proof. Implementation commit `c2d424e00e3704bd963132d4b5b669013817f20d`. Gates for live providers, gateway, merge, and deploy remain. Not owner UAT. |
 
 ## 19. Provenance
 
