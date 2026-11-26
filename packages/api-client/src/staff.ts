@@ -39,11 +39,27 @@ export interface CourtDto {
   filedOn: string | null;
   cnr?: string | null;
   officialUrl?: string | null;
-  trackingSource?: 'manual';
+  trackingSource?: 'manual' | 'import';
   freshness?: 'unverified' | 'verified_manual';
   stale?: boolean;
   verifiedAt?: string | null;
   lookup?: 'not_performed';
+}
+export interface CourtImportDto {
+  id: string;
+  sourceName: string;
+  externalId: string;
+  courtName: string;
+  caseNumber: string;
+  title: string;
+  listedOn: string;
+  sourceUrl: string;
+  retrievedAt: string;
+  status: 'stored' | 'stale' | 'error';
+  error: string | null;
+  appliedToMatter: boolean;
+  appliedToMatterId: string | null;
+  appliedAt: string | null;
 }
 export interface MatterDto {
   id: string;
@@ -484,7 +500,24 @@ export function createStaffClient(options: ClientOptions) {
     updateMatter: (id: string, b: Record<string, unknown>) => patch<MatterDto>(`/matters/${id}`, b),
     verifyCourt: (id: string) => post<MatterDto>(`/matters/${id}/court/verify`, {}),
     courtProvider: () =>
-      get<{ status: string; lookup: string; detail: string }>('/courts/provider'),
+      get<{ status: string; lookup: string; detail: string; fileDrop?: string }>(
+        '/courts/provider',
+      ),
+    courtFeed: () =>
+      get<{ mode: string; lookup: string; detail: string; liveProvider?: string }>('/courts/feed'),
+    courtImports: () => get<{ mode: string; data: CourtImportDto[] }>('/courts/imports'),
+    importCourtRows: (b: { rows: Record<string, unknown>[] }) =>
+      post<{ appliedToMatter: boolean; results: { externalId: string; outcome: string; id: string }[] }>(
+        '/courts/imports',
+        b,
+      ),
+    applyCourtImport: (id: string, b: { matterId: string; note?: string }) =>
+      post<{
+        import: CourtImportDto;
+        matterId: string;
+        trackingSource: string;
+        freshness: string;
+      }>(`/courts/imports/${id}/apply`, b),
     deadlines: () => get<{ data: Record<string, unknown>[] }>('/deadlines'),
     createDeadline: (b: Record<string, unknown>) => post('/deadlines', b),
     submitDeadline: (id: string) => post(`/deadlines/${id}/submit`, {}),

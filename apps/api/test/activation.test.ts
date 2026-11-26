@@ -78,6 +78,68 @@ describe('local activation when the switches are on', () => {
     expect((await post(owner, '/v1/courts/imports', { rows: [operator] })).status).toBe(400);
   });
 
+  it('applies a stored file-drop row to a matter after review, and refuses a stale row', async () => {
+    const owner = await registerWithMfa(app);
+    const provider = await owner.agent.get('/v1/courts/provider');
+    expect(provider.body).toMatchObject({
+      status: 'external_activation_gate',
+      liveProvider: 'none',
+      fileDrop: 'enabled',
+      lookup: 'not_performed',
+    });
+    const clientId = await newClient(owner);
+    const matter = await post(owner, '/v1/matters', {
+      clientId,
+      title: 'File-drop matter',
+      practiceArea: 'litigation',
+    });
+    expect(matter.status).toBe(201);
+    const fresh = new Date().toISOString();
+    const stored = await post(owner, '/v1/courts/imports', {
+      rows: [row('SYN-APPLY', 'Listing for apply', fresh)],
+    });
+    expect(stored.body.results[0].outcome).toBe('stored');
+    const importId = stored.body.results[0].id as string;
+    const applied = await post(owner, `/v1/courts/imports/${importId}/apply`, {
+      matterId: matter.body.id,
+      note: 'Compared the firm file with the brief',
+    });
+    expect(applied.status).toBe(200);
+    expect(applied.body).toMatchObject({
+      matterId: matter.body.id,
+      trackingSource: 'import',
+      freshness: 'unverified',
+      lookup: 'not_performed',
+    });
+    expect(applied.body.import.appliedToMatter).toBe(true);
+    expect(applied.body.import.appliedToMatterId).toBe(matter.body.id);
+    const seen = await owner.agent.get(`/v1/matters/${matter.body.id}`);
+    expect(seen.body.court).toMatchObject({
+      name: 'Synthetic Court',
+      caseNumber: 'SYN/1/2026',
+      officialUrl: 'https://example.com/synthetic-cause-list',
+      trackingSource: 'import',
+      freshness: 'unverified',
+      lookup: 'not_performed',
+    });
+    const verified = await post(owner, `/v1/matters/${matter.body.id}/court/verify`, {});
+    expect(verified.body.court).toMatchObject({
+      trackingSource: 'import',
+      freshness: 'verified_manual',
+    });
+    const stale = await post(owner, '/v1/courts/imports', {
+      rows: [row('SYN-STALE-APPLY', 'Too old', '2020-01-01T00:00:00.000Z')],
+    });
+    expect(stale.body.results[0].outcome).toBe('stale');
+    expect(
+      (
+        await post(owner, `/v1/courts/imports/${stale.body.results[0].id}/apply`, {
+          matterId: matter.body.id,
+        })
+      ).status,
+    ).toBe(409);
+  });
+
   it('keeps an approved email on this machine', async () => {
     const owner = await registerWithMfa(app);
     const clientId = await newClient(owner, 'Synthetic Holdings');

@@ -83,8 +83,12 @@ export class PracticeService {
       id: 'none',
       status: 'external_activation_gate' as const,
       lookup: 'not_performed' as const,
+      liveProvider: 'none' as const,
+      fileDrop: this.env.COURT_FEED === 'import' ? ('enabled' as const) : ('off' as const),
       detail:
-        'No official court feed is connected. A CNR is checked for shape only. A person can record that they compared an entry with an official source. This server does not call a court and does not invent orders or dates.',
+        this.env.COURT_FEED === 'import'
+          ? 'No live court network provider is connected. Authorised file-drop import is enabled: staff may store rows the firm already obtained and apply one to a matter after review. A CNR is shape-only. This server does not call a court, does not scrape, and does not invent orders or dates.'
+          : 'No official court feed is connected. Court fields stay manual unless COURT_FEED=import is set for authorised file-drop rows. A CNR is checked for shape only. This server does not call a court and does not invent orders or dates.',
     };
   }
 

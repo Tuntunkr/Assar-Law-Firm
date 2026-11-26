@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document id | ASSAR-PRD-2026-11-08 |
-| Version | 1.0.5 |
+| Version | 1.0.6 |
 | Cutoff | 8 Nov 2026, 10:23 IST. Later notes in this file are labelled with the clock time they were verified on this worker. |
 | Owner | Tuntunkr |
 | Repository | Tuntunkr/Assar-Law-Firm |
@@ -243,7 +243,7 @@ Depends on: membership and matter access.
 
 Purpose: a person types court name, case number, judge, courtroom, jurisdiction, filing date, a 16-character CNR, and an https URL. Freshness is `unverified` until someone with `matter:write` records that they compared it. A verification older than seven days is stale. Editing the court block clears verification.
 
-Status: BRANCH-IMPLEMENTED for the card and for `GET /v1/courts/provider`, which returns `id: none`, `status: external_activation_gate`, `lookup: not_performed`. LIVE-GATED for any real feed. WORKING-TREE adds `COURT_FEED=manual|import` (default `manual`). Import stores rows the firm already has. It does not fetch. `appliedToMatter` is always false. Unique key is organization, source name, and external id. A changed payload without `retry` is a conflict. A `retrievedAt` older than seven days is stale.
+Status: BRANCH-IMPLEMENTED for the card and for `GET /v1/courts/provider`, which returns `id: none`, `status: external_activation_gate`, `lookup: not_performed`, `liveProvider: none`. LIVE-GATED for any live network feed. `COURT_FEED=manual|import` (default `manual`). Import is the professional authorised file-drop: store rows the firm already has, then `POST /v1/courts/imports/:id/apply` copies name, case number, and official URL onto a matter with `trackingSource: import` and freshness still unverified. Stale rows cannot apply. Unique key is organization, source name, and external id. A changed payload without `retry` is a conflict. A `retrievedAt` older than seven days is stale. The server does not fetch, scrape, or invent orders.
 
 Workflow: W1, W2.
 
@@ -365,7 +365,7 @@ Status: BRANCH-IMPLEMENTED for access rows, audit, and rate limits. A disposable
 
 | Item | Status |
 | --- | --- |
-| Live automatic court, CNR, or cause-list feed | Not built. Manual card plus, in the working tree, an import of rows the firm already holds. |
+| Live automatic court, CNR, or cause-list feed | Live network provider still gated. Professional path is authorised file-drop import + human apply to matter (section 6.3). No scrape. |
 | Live WhatsApp | Adapter is BRANCH-IMPLEMENTED and default off. Account, token, phone id, app secret, verify token, approved template, HTTPS, and consent are still required. |
 | Live email | Not sent. Working tree can hold a local copy or stop at the SMTP gate. |
 | Production n8n | Templates and a disposable test only. |
@@ -734,7 +734,7 @@ US accounting exports are not Indian tax compliance. Other names from the 7 Nov 
 | 7 | Conflict check | Stored for a person to read; no auto-clearance | BRANCH-IMPLEMENTED route. Fresh assertion not re-run. |
 | 8 | Court card with a bad CNR or http URL | 400 | Historical. Not re-run. |
 | 9 | `GET /v1/courts/provider` | `external_activation_gate`, lookup not performed | Historical assertion. Working-tree suite still expects that body. |
-| 10 | Import a cause-list row | Stored, not applied to a matter; no network | Working-tree pass. Not in `7d7efdf`. |
+| 10 | Import a cause-list row | Stored; apply is a separate human step; no network | Activation tests: store/replay/conflict/stale, then apply sets `trackingSource: import`. |
 | 11 | Replay the same import payload | `replayed` | Working-tree pass. |
 | 12 | Change the payload without retry | `conflict` | Working-tree pass. |
 | 13 | `retrievedAt` older than 7 days | `stale` | Working-tree pass. |
@@ -854,6 +854,7 @@ This PRD does not authorise new application behaviour. Implementation continues 
 | 1.0.3 | 8 Nov 2026 | Record the connected cloud-local journey, the 44px staff and portal measurements, the owned data directories, and the fresh production build. Implementation commit `b98c20a37d24c7f47b7cefb54f980dd82089e905`. Not owner UAT. Not a security or legal certificate. |
 | 1.0.4 | 8 Nov 2026 | Record matter and task names without a member directory, and a ClamAV scan on this worker only. Implementation commit `259a565b037366595856566b4d845fc4f39b9bc7`. The earlier 300 passed and 6 skipped API run was not repeated. Not owner UAT. Not a security or legal certificate. |
 | 1.0.5 | 26 Nov 2026 | Pending local polish: hearing outcome Modal, deadline re-approval after edit, intern revoke test, signed-download re-run, disposable backup restore proof. Implementation commit `c2d424e00e3704bd963132d4b5b669013817f20d`. Gates for live providers, gateway, merge, and deploy remain. Not owner UAT. |
+| 1.0.6 | 26 Nov 2026 | Professional court path: authorised file-drop import can be applied to a matter after human review; live network provider stays gated; no scrape. Branch `cursor/court-file-drop-apply-d89d`. |
 
 ## 19. Provenance
 

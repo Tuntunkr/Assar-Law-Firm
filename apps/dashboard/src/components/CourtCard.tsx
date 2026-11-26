@@ -1,5 +1,5 @@
-import type { CourtDto, MatterDto } from '@assar/api-client';
-import { Button, Card, Modal, TextField } from '@assar/ui';
+import type { CourtDto, CourtImportDto, MatterDto } from '@assar/api-client';
+import { Button, Card, Modal, SelectField, TextField } from '@assar/ui';
 import { useState } from 'react';
 import { useAuth } from '../lib/auth';
 import { formatDate, formatDateTime } from '../lib/format';
@@ -40,6 +40,7 @@ export function CourtCard({ matter, onSaved }: { matter: MatterDto; onSaved: () 
     ),
   }));
 
+  const [importId, setImportId] = useState('');
   const next = useAsync(async () => {
     const from = new Date();
     const to = new Date(from.getTime() + 365 * 86_400_000);
@@ -56,6 +57,18 @@ export function CourtCard({ matter, onSaved }: { matter: MatterDto; onSaved: () 
         .sort((a, b) => a.startsAt.localeCompare(b.startsAt))[0] ?? null
     );
   }, [client, matter.id]);
+  const canWriteMatter = can('matter:write');
+  const imports = useAsync(async () => {
+    if (!canWriteMatter) return [] as CourtImportDto[];
+    try {
+      const feed = await client.courtFeed();
+      if (feed.mode !== 'import') return [] as CourtImportDto[];
+      const list = await client.courtImports();
+      return list.data.filter((row) => row.status === 'stored');
+    } catch {
+      return [] as CourtImportDto[];
+    }
+  }, [client, canWriteMatter, matter.id]);
 
   const c = matter.court;
   return (
@@ -88,7 +101,11 @@ export function CourtCard({ matter, onSaved }: { matter: MatterDto; onSaved: () 
       )}
       {c && (
         <p className="mt-3 text-sm text-navy-700">
-          Source: typed by the firm. Lookup: not performed.
+          Source:{' '}
+          {c.trackingSource === 'import'
+            ? 'applied from an authorised file-drop import'
+            : 'typed by the firm'}
+          . Lookup: not performed.
           {c.freshness === 'verified_manual'
             ? c.stale
               ? ' Last manual check is older than 7 days.'
@@ -103,6 +120,51 @@ export function CourtCard({ matter, onSaved }: { matter: MatterDto; onSaved: () 
             </>
           ) : null}
         </p>
+      )}
+      {can('matter:write') && imports.status === 'ready' && imports.data.length > 0 && (
+        <div className="mt-3 space-y-2 rounded-lg border border-navy-100 p-3">
+          <p className="text-sm text-navy-700">
+            Apply a stored file-drop row. This does not call a court.
+          </p>
+          <SelectField
+            id="court-import"
+            label="Stored import"
+            value={importId}
+            onChange={(e) => setImportId(e.target.value)}
+          >
+            <option value="">Choose a row</option>
+            {imports.data.map((row) => (
+              <option key={row.id} value={row.id}>
+                {row.title} · {row.caseNumber}
+                {row.appliedToMatter ? ' (applied before)' : ''}
+              </option>
+            ))}
+          </SelectField>
+          <Button
+            variant="secondary"
+            disabled={!importId || act.busy}
+            onClick={() =>
+              act
+                .run(
+                  () =>
+                    client.applyCourtImport(importId, {
+                      matterId: matter.id,
+                      note: 'Applied from authorised file-drop after review',
+                    }),
+                  'Import applied to this matter',
+                )
+                .then((ok) => {
+                  if (ok) {
+                    setImportId('');
+                    imports.reload();
+                    onSaved();
+                  }
+                })
+            }
+          >
+            Apply import to this matter
+          </Button>
+        </div>
       )}
       {c && can('matter:write') && (
         <Button

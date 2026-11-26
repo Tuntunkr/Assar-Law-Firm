@@ -1,6 +1,7 @@
 import { Body, Controller, Get, HttpCode, Post, Param, Req } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import {
+  applyCourtImportSchema,
   courtFormDraftSchema,
   courtFormSignoffSchema,
   courtImportBatchSchema,
@@ -38,6 +39,18 @@ export class ActivationController {
     @Req() req: AppRequest,
   ) {
     return this.activation.importCauseList(auth, body, req);
+  }
+
+  @RequirePermissions('matter:write')
+  @HttpCode(200)
+  @Post('courts/imports/:id/apply')
+  applyImport(
+    @Auth() auth: AuthContext,
+    @Param('id', ObjectIdPipe) id: string,
+    @Body(new ZodPipe(applyCourtImportSchema)) body: z.infer<typeof applyCourtImportSchema>,
+    @Req() req: AppRequest,
+  ) {
+    return this.activation.applyImport(auth, id, body, req);
   }
 
   @Public()

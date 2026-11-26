@@ -11,6 +11,8 @@ import {
 type Id = Types.ObjectId | string;
 
 export const courtImports = {
+  findById: (organizationId: Id, id: Id) =>
+    CourtImportModel.findOne({ _id: id, organizationId }).lean(),
   findKey: (organizationId: Id, sourceName: string, externalId: string) =>
     CourtImportModel.findOne({ organizationId, sourceName, externalId }).lean(),
   list: (organizationId: Id) =>
@@ -26,6 +28,20 @@ export const courtImports = {
     CourtImportModel.findOneAndUpdate(
       { organizationId, sourceName, externalId },
       patch,
+      { returnDocument: 'after' },
+    ).lean(),
+  markApplied: (
+    organizationId: Id,
+    id: Id,
+    applied: { matterId: Id; actorId: Id; at: Date },
+  ) =>
+    CourtImportModel.findOneAndUpdate(
+      { _id: id, organizationId },
+      {
+        appliedToMatterId: applied.matterId,
+        appliedAt: applied.at,
+        appliedBy: applied.actorId,
+      },
       { returnDocument: 'after' },
     ).lean(),
 };

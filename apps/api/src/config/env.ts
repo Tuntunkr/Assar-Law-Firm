@@ -95,8 +95,9 @@ const object = z.object({
   /** Delay before a retry of HTTP 429 or 5xx. Tests set 0. Three attempts, then a failed row. */
   WHATSAPP_RETRY_BASE_MS: z.coerce.number().int().min(0).max(10_000).default(200),
   /**
-   * `manual` does not fetch a court. `import` accepts a file the firm already obtained.
-   * Neither mode calls a court website.
+   * `manual` — typed court card only.
+   * `import` — authorised file-drop: store rows the firm already obtained, then a person may apply one to a matter.
+   * Neither mode calls a court website or scrapes. Live network providers stay gated.
    */
   COURT_FEED: z.enum(['manual', 'import']).default('manual'),
   /**

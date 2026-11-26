@@ -383,6 +383,11 @@ export const courtImportRowSchema = z.object({
 export const courtImportBatchSchema = z.object({
   rows: z.array(courtImportRowSchema).min(1).max(50),
 });
+/** A person copies an imported row onto a matter. This is not a court lookup. */
+export const applyCourtImportSchema = z.object({
+  matterId: objectIdSchema,
+  note: z.string().trim().min(2).max(500).optional(),
+});
 
 export const demoBookingSchema = demoRequestSchema.extend({
   slotStart: z.string().datetime({ offset: true }),

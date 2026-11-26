@@ -5,14 +5,22 @@ import {
   courtImports,
   demoBookings,
   localMailbox,
+  matters,
   type CourtImportDoc,
 } from '@assar/database';
 import type { z } from 'zod';
-import type { courtFormDraftSchema, courtFormSignoffSchema, courtImportBatchSchema, demoBookingSchema } from '@assar/validation';
+import type {
+  applyCourtImportSchema,
+  courtFormDraftSchema,
+  courtFormSignoffSchema,
+  courtImportBatchSchema,
+  demoBookingSchema,
+} from '@assar/validation';
 import { AuditService } from '../audit/audit.service';
 import type { AppRequest, AuthContext } from '../common/auth-context';
 import { ApiError } from '../common/exception.filter';
 import { ENV, type Env } from '../config/env';
+import { MatterAccessService } from '../matters/matter-access.service';
 
 type Req = Pick<AppRequest, 'ip' | 'id'>;
 const STALE_MS = 7 * 24 * 3600_000;
@@ -45,13 +53,16 @@ const importDto = (row: CourtImportDoc) => ({
   retrievedAt: row.retrievedAt,
   status: row.status,
   error: row.error,
-  appliedToMatter: false as const,
+  appliedToMatter: !!row.appliedToMatterId,
+  appliedToMatterId: row.appliedToMatterId ? String(row.appliedToMatterId) : null,
+  appliedAt: row.appliedAt ?? null,
 });
 
 @Injectable()
 export class ActivationService {
   constructor(
     private readonly audit: AuditService,
+    private readonly access: MatterAccessService,
     @Inject(ENV) private readonly env: Env,
   ) {}
 
@@ -59,10 +70,11 @@ export class ActivationService {
     return {
       mode: this.env.COURT_FEED,
       lookup: 'not_performed' as const,
+      liveProvider: 'none' as const,
       detail:
         this.env.COURT_FEED === 'import'
-          ? 'Import accepts rows the firm already has. This server does not call a court, does not scrape, and does not copy a row onto a matter.'
-          : 'No court feed is connected. Court fields stay manual.',
+          ? 'Authorised file-drop import is on. Staff may store rows the firm already obtained and apply one to a matter after review. This server does not call a court and does not scrape.'
+          : 'No court feed is connected. Court fields stay manual. Set COURT_FEED=import for authorised file-drop rows.',
     };
   }
 
@@ -157,6 +169,71 @@ export class ActivationService {
       meta: { rows: results.length },
     });
     return { appliedToMatter: false as const, results };
+  }
+
+  /**
+   * Copies an imported row onto a matter after a person reviews it.
+   * Does not fetch a court. Freshness stays unverified until someone records a comparison.
+   */
+  async applyImport(
+    auth: AuthContext,
+    id: string,
+    body: z.infer<typeof applyCourtImportSchema>,
+    req: Req,
+  ) {
+    if (this.env.COURT_FEED !== 'import')
+      throw new ApiError(503, 'SERVICE_UNAVAILABLE', 'Court import is off. COURT_FEED=manual.');
+    const row = await courtImports.findById(auth.organizationId, id);
+    if (!row) throw new ApiError(404, 'NOT_FOUND', 'Import row not found');
+    if (row.status !== 'stored')
+      throw new ApiError(
+        409,
+        'CONFLICT',
+        'Only a fresh stored import can be applied. Stale or error rows stay off the matter.',
+      );
+    const matter = await this.access.load(auth, body.matterId, req);
+    const at = new Date();
+    const updated = await matters.update(auth.organizationId, body.matterId, {
+      court: {
+        ...(matter.court ?? {}),
+        name: row.courtName,
+        caseNumber: row.caseNumber,
+        officialUrl: row.sourceUrl,
+        trackingSource: 'import',
+        freshness: 'unverified',
+        verifiedAt: null,
+        verifiedBy: null,
+      },
+    });
+    if (!updated) throw new ApiError(404, 'NOT_FOUND', 'Matter not found');
+    const marked = await courtImports.markApplied(auth.organizationId, id, {
+      matterId: body.matterId,
+      actorId: auth.userId,
+      at,
+    });
+    await this.audit.record({
+      organizationId: auth.organizationId,
+      actorId: auth.userId,
+      action: 'court.import_applied',
+      targetType: 'matter',
+      targetId: body.matterId,
+      req,
+      meta: {
+        importId: id,
+        externalId: row.externalId,
+        sourceName: row.sourceName,
+        note: body.note ?? null,
+        listedOn: row.listedOn,
+        title: row.title,
+      },
+    });
+    return {
+      import: importDto(marked ?? { ...row, appliedToMatterId: body.matterId as never, appliedAt: at, appliedBy: auth.userId as never }),
+      matterId: body.matterId,
+      trackingSource: 'import' as const,
+      freshness: 'unverified' as const,
+      lookup: 'not_performed' as const,
+    };
   }
 
   async slots() {

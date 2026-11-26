@@ -358,7 +358,8 @@ export interface MatterDoc {
     /** 16-character shape. Not a court lookup. */
     cnr?: string;
     officialUrl?: string;
-    trackingSource?: 'manual';
+    /** `manual` = typed; `import` = applied from an authorised file-drop row. Never a live scrape. */
+    trackingSource?: 'manual' | 'import';
     freshness?: 'unverified' | 'verified_manual';
     verifiedAt?: Date | null;
     verifiedBy?: Id | null;
@@ -398,7 +399,7 @@ const matterSchema = new Schema<MatterDoc>(
           filedOn: { type: String, match: /^\d{4}-\d{2}-\d{2}$/ },
           cnr: { type: String, uppercase: true, match: /^[A-Z0-9]{16}$/ },
           officialUrl: { type: String, maxlength: 500 },
-          trackingSource: { type: String, enum: ['manual'], default: 'manual' },
+          trackingSource: { type: String, enum: ['manual', 'import'], default: 'manual' },
           freshness: {
             type: String,
             enum: ['unverified', 'verified_manual'],
@@ -1481,6 +1482,10 @@ export interface CourtImportDoc {
   status: 'stored' | 'stale' | 'error';
   error: string | null;
   importedBy: Id;
+  /** Set only after a person applies the row to a matter. */
+  appliedToMatterId?: Id | null;
+  appliedAt?: Date | null;
+  appliedBy?: Id | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -1499,6 +1504,9 @@ const courtImportSchema = new Schema<CourtImportDoc>(
     status: { type: String, enum: ['stored', 'stale', 'error'], required: true },
     error: { type: String, maxlength: 300, default: null },
     importedBy: { type: Schema.Types.ObjectId, required: true },
+    appliedToMatterId: { type: Schema.Types.ObjectId, default: null },
+    appliedAt: { type: Date, default: null },
+    appliedBy: { type: Schema.Types.ObjectId, default: null },
   },
   { timestamps: true },
 );

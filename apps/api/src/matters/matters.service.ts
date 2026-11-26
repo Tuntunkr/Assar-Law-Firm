@@ -46,7 +46,7 @@ const courtDto = (c: MatterDoc['court']) => {
     filedOn: c.filedOn ?? null,
     cnr: c.cnr ?? null,
     officialUrl: c.officialUrl ?? null,
-    trackingSource: 'manual' as const,
+    trackingSource: c.trackingSource === 'import' ? ('import' as const) : ('manual' as const),
     freshness:
       c.freshness === 'verified_manual' ? ('verified_manual' as const) : ('unverified' as const),
     stale: c.freshness === 'verified_manual' && isStaleVerification(c.verifiedAt),
@@ -266,7 +266,7 @@ export class MattersService {
     const updated = await matters.update(auth.organizationId, id, {
       court: {
         ...current.court,
-        trackingSource: 'manual',
+        trackingSource: current.court.trackingSource === 'import' ? 'import' : 'manual',
         freshness: 'verified_manual',
         verifiedAt,
         verifiedBy: auth.userId,
@@ -280,7 +280,10 @@ export class MattersService {
       targetType: 'matter',
       targetId: id,
       req,
-      meta: { freshness: 'verified_manual' },
+      meta: {
+        freshness: 'verified_manual',
+        trackingSource: current.court.trackingSource === 'import' ? 'import' : 'manual',
+      },
     });
     return (await withIdentity(auth.organizationId, [updated]))[0]!;
   }
