@@ -854,7 +854,7 @@ This PRD does not authorise new application behaviour. Implementation continues 
 | 1.0.3 | 8 Nov 2026 | Record the connected cloud-local journey, the 44px staff and portal measurements, the owned data directories, and the fresh production build. Implementation commit `b98c20a37d24c7f47b7cefb54f980dd82089e905`. Not owner UAT. Not a security or legal certificate. |
 | 1.0.4 | 8 Nov 2026 | Record matter and task names without a member directory, and a ClamAV scan on this worker only. Implementation commit `259a565b037366595856566b4d845fc4f39b9bc7`. The earlier 300 passed and 6 skipped API run was not repeated. Not owner UAT. Not a security or legal certificate. |
 | 1.0.5 | 26 Nov 2026 | Pending local polish: hearing outcome Modal, deadline re-approval after edit, intern revoke test, signed-download re-run, disposable backup restore proof. Implementation commit `c2d424e00e3704bd963132d4b5b669013817f20d`. Gates for live providers, gateway, merge, and deploy remain. Not owner UAT. |
-| 1.0.6 | 26 Nov 2026 | Professional court path: authorised file-drop import can be applied to a matter after human review; live network provider stays gated; no scrape. Branch `cursor/court-file-drop-apply-d89d`. |
+| 1.0.6 | 26 Nov 2026 | Professional court path: authorised file-drop import can be applied to a matter after human review; live network provider stays gated; no scrape. Implementation commit `b35bf1033765012f72853ce57d9d19fb01ffa9e8`. Branch `cursor/court-file-drop-apply-d89d`. |
 
 ## 19. Provenance
 
