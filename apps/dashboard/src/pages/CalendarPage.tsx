@@ -1,4 +1,5 @@
 import type { EventDto } from '@assar/api-client';
+import { HEARING_RESULTS } from '@assar/types';
 import {
   Button,
   Modal,
@@ -8,7 +9,7 @@ import {
   TextAreaField,
   TextField,
 } from '@assar/ui';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { AsyncView, EmptyState } from '../components/AsyncView';
 import { MatterPicker } from '../components/Pickers';
 import { useAuth } from '../lib/auth';
@@ -27,6 +28,7 @@ export function CalendarPage() {
     () => new Date(new Date().getFullYear(), new Date().getMonth(), 1),
   );
   const [creating, setCreating] = useState(false);
+  const [outcomeFor, setOutcomeFor] = useState<EventDto | null>(null);
   const range = useMemo(() => {
     const from = new Date(month.getFullYear(), month.getMonth(), 1);
     const to = new Date(month.getFullYear(), month.getMonth() + 1, 1);
@@ -113,21 +115,7 @@ export function CalendarPage() {
                             <Button
                               variant="ghost"
                               disabled={act.busy}
-                              onClick={async () => {
-                                const notes = window.prompt('Hearing note (typed, not calculated)');
-                                if (!notes) return;
-                                if (
-                                  await act.run(
-                                    () =>
-                                      client.recordOutcome(e.id, {
-                                        result: 'adjourned',
-                                        notes,
-                                      }),
-                                    'Outcome saved as a draft',
-                                  )
-                                )
-                                  state.reload();
-                              }}
+                              onClick={() => setOutcomeFor(e)}
                             >
                               Record outcome
                             </Button>
@@ -189,7 +177,103 @@ export function CalendarPage() {
         }}
       </AsyncView>
       <NewEventModal open={creating} onClose={() => setCreating(false)} onCreated={state.reload} />
+      <OutcomeModal
+        event={outcomeFor}
+        onClose={() => setOutcomeFor(null)}
+        onSaved={() => {
+          setOutcomeFor(null);
+          state.reload();
+        }}
+      />
     </>
+  );
+}
+
+function OutcomeModal({
+  event,
+  onClose,
+  onSaved,
+}: {
+  event: EventDto | null;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const { client } = useAuth();
+  const { run, busy, errors } = useAction();
+  const [result, setResult] = useState<string>(HEARING_RESULTS[0]);
+  const [notes, setNotes] = useState('');
+  const [nextHearingOn, setNextHearingOn] = useState('');
+  useEffect(() => {
+    if (!event) return;
+    setResult(event.outcome?.result ?? HEARING_RESULTS[0]);
+    setNotes(event.outcome?.notes ?? '');
+    setNextHearingOn('');
+  }, [event]);
+
+  return (
+    <Modal open={!!event} onClose={onClose} title="Record hearing outcome">
+      <form
+        className="space-y-3"
+        onSubmit={async (e) => {
+          e.preventDefault();
+          if (!event) return;
+          const body = {
+            result,
+            notes,
+            ...(nextHearingOn ? { nextHearingOn } : {}),
+          };
+          if (await run(() => client.recordOutcome(event.id, body), 'Outcome saved as a draft')) {
+            setNotes('');
+            setNextHearingOn('');
+            setResult(HEARING_RESULTS[0]);
+            onSaved();
+          }
+        }}
+      >
+        <p className="text-sm text-navy-700">
+          {event?.title ?? 'Hearing'}. Typed notes only — not a court filing and not a calculated
+          date.
+        </p>
+        <SelectField
+          id="oresult"
+          label="Result"
+          value={result}
+          onChange={(e) => setResult(e.target.value)}
+          error={errors.result}
+        >
+          {HEARING_RESULTS.map((r) => (
+            <option key={r} value={r}>
+              {r.replace(/_/g, ' ')}
+            </option>
+          ))}
+        </SelectField>
+        <TextAreaField
+          id="onotes"
+          label="Hearing note"
+          rows={4}
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          error={errors.notes}
+          required
+        />
+        <TextField
+          id="onext"
+          label="Next hearing on (optional)"
+          type="date"
+          value={nextHearingOn}
+          onChange={(e) => setNextHearingOn(e.target.value)}
+          error={errors.nextHearingOn}
+        />
+        <div className="flex justify-end gap-2 pt-2">
+          <Button type="button" variant="secondary" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="submit" loading={busy}>
+            Save draft
+          </Button>
+        </div>
+      </form>
+    </Modal>
   );
 }
 

@@ -126,11 +126,13 @@ export class PracticeService {
     req: Req,
   ) {
     const current = await this.loadDeadline(auth, id, req);
-    if (current.status !== 'draft' && current.status !== 'rejected')
-      throw new ApiError(409, 'CONFLICT', 'Only a draft or rejected date can be edited');
+    if (current.status === 'closed')
+      throw new ApiError(409, 'CONFLICT', 'A closed date cannot be edited');
     const row = await deadlines.update(auth.organizationId, id, {
       ...patch,
       status: 'draft',
+      approvedBy: null,
+      approvedAt: null,
       $push: { history: { at: new Date(), actorId: auth.userId, action: 'edited' } },
     });
     if (!row) throw new ApiError(404, 'NOT_FOUND', 'Date not found');

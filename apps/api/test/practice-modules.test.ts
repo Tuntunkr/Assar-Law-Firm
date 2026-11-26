@@ -3,7 +3,16 @@ import type { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { istDate } from '@assar/types';
 import { hmac } from '../src/common/crypto';
-import { addMember, bootApp, newClient, newMatter, post, registerWithMfa } from './helpers';
+import {
+  addMember,
+  bootApp,
+  newClient,
+  newMatter,
+  patch,
+  post,
+  put,
+  registerWithMfa,
+} from './helpers';
 
 const SECRET = 'test-webhook-secret-16';
 
@@ -148,6 +157,67 @@ describe('approved practice modules', () => {
     const run = await post(attorney, '/v1/deadlines/reminders/run', {});
     expect(run.status).toBe(201);
     expect(run.body.notified).toBeGreaterThan(0);
+  });
+
+  it('returns an approved date to draft when edited, and refuses a closed edit', async () => {
+    const owner = await registerWithMfa(app);
+    const attorney = await addMember(app, owner, 'attorney');
+    const paralegal = await addMember(app, owner, 'paralegal');
+    const clientId = await newClient(owner);
+    const matter = await newMatter(owner, clientId);
+    const deadline = await post(paralegal, '/v1/deadlines', {
+      matterId: matter.id,
+      kind: 'other_deadline',
+      title: 'Typed reply date',
+      basisNote: 'Counsel typed this from the brief.',
+      dueOn: istDate(),
+    });
+    expect(deadline.status).toBe(201);
+    await post(paralegal, `/v1/deadlines/${deadline.body.id}/submit`, {});
+    const approved = await post(attorney, `/v1/deadlines/${deadline.body.id}/approve`, {});
+    expect(approved.body.status).toBe('approved');
+    const edited = await patch(paralegal, `/v1/deadlines/${deadline.body.id}`, {
+      title: 'Typed reply date (revised)',
+    });
+    expect(edited.status).toBe(200);
+    expect(edited.body.status).toBe('draft');
+    expect(edited.body.title).toBe('Typed reply date (revised)');
+    expect(edited.body.approvedBy).toBeFalsy();
+    expect((await post(paralegal, `/v1/deadlines/${deadline.body.id}/approve`, {})).status).toBe(
+      403,
+    );
+    const submitted = await post(paralegal, `/v1/deadlines/${deadline.body.id}/submit`, {});
+    expect(submitted.body.status).toBe('pending_approval');
+    const again = await post(attorney, `/v1/deadlines/${deadline.body.id}/approve`, {});
+    expect(again.body.status).toBe('approved');
+    await post(attorney, `/v1/deadlines/${deadline.body.id}/close`, {});
+    expect(
+      (await patch(paralegal, `/v1/deadlines/${deadline.body.id}`, { title: 'Too late' })).status,
+    ).toBe(409);
+  });
+
+  it('revokes an intern from a matter after open assignments are cleared', async () => {
+    const owner = await registerWithMfa(app);
+    const intern = await addMember(app, owner, 'intern');
+    const clientId = await newClient(owner);
+    const matter = await newMatter(owner, clientId, { title: 'Intern revoke matter' });
+    const task = await post(owner, '/v1/tasks', {
+      title: 'Index bundle',
+      matterId: matter.id,
+      assigneeId: intern.userId,
+    });
+    expect(task.status).toBe(201);
+    expect((await intern.agent.get(`/v1/matters/${matter.id}`)).status).toBe(200);
+    const cleared = await patch(owner, `/v1/tasks/${task.body.id}`, { assigneeId: null });
+    expect(cleared.status).toBe(200);
+    const access = await put(owner, `/v1/matters/${matter.id}/access`, {
+      restricted: false,
+      userIds: [],
+    });
+    expect(access.status).toBe(200);
+    expect(access.body.userIds).not.toContain(intern.userId);
+    expect((await intern.agent.get(`/v1/matters/${matter.id}`)).status).toBe(404);
+    expect((await intern.agent.get('/v1/tasks')).body.data).toEqual([]);
   });
 
   it('approves a message preview in mock mode and acknowledges it once', async () => {
