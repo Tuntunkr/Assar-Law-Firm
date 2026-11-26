@@ -2,7 +2,7 @@ import type { InputHTMLAttributes, SelectHTMLAttributes, TextareaHTMLAttributes 
 import { cn } from '../cn';
 
 const control =
-  'block w-full rounded-lg border bg-white px-3 py-2 text-sm text-navy-900 ' +
+  'block min-h-11 w-full rounded-lg border bg-white px-3 py-2 text-sm text-navy-900 ' +
   'focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent-500';
 
 interface FieldProps {

@@ -86,7 +86,7 @@ export function LoginPage() {
         {!needsCode && (
           <p className="text-center text-sm text-navy-600">
             New firm?{' '}
-            <Link to="/signup" className="font-medium text-accent-700 hover:underline">
+            <Link to="/signup" className="inline-flex min-h-11 items-center font-medium text-accent-700 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-500">
               Create an account
             </Link>
           </p>

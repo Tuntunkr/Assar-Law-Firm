@@ -78,7 +78,7 @@ export function SecurityPanel() {
             </p>
             <Link
               to="/mfa-setup"
-              className="inline-flex h-10 items-center rounded-lg bg-accent-600 px-4 text-sm font-semibold text-white hover:bg-accent-700"
+              className="inline-flex h-11 items-center rounded-lg bg-accent-600 px-4 text-sm font-semibold text-white hover:bg-accent-700"
             >
               Set up MFA
             </Link>

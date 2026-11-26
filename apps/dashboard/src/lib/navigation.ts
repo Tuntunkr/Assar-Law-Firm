@@ -14,7 +14,9 @@ export const NAV: { group: string; items: NavItem[] }[] = [
       { to: '/', label: 'Dashboard', icon: 'dashboard' },
       { to: '/ask', label: 'Ask Assar', icon: 'ai', perm: 'assistant:use' },
       { to: '/calendar', label: 'Calendar', icon: 'calendar', perm: 'calendar:write' },
+      { to: '/dates', label: 'Dates', icon: 'calendar', perm: 'matter:read' },
       { to: '/tasks', label: 'Tasks', icon: 'tasks', perm: 'task:write' },
+      { to: '/updates', label: 'Client updates', icon: 'documents', perm: 'matter:read' },
     ],
   },
   {

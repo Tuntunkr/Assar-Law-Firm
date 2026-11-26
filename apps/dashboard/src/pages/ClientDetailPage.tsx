@@ -110,7 +110,7 @@ export function ClientDetailPage() {
                         <li key={m.id} className="flex items-center justify-between py-2.5">
                           <Link
                             to={`/matters/${m.id}`}
-                            className="font-medium text-accent-700 hover:underline"
+                            className="inline-flex min-h-11 items-center font-medium text-accent-700 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-500"
                           >
                             {m.matterNumber} — {m.title}
                           </Link>
@@ -147,7 +147,7 @@ export function ClientDetailPage() {
                           <span className="flex items-center gap-3">
                             <StatusPill tone={toneOf(u.status)}>{u.status}</StatusPill>
                             <button
-                              className="text-xs font-medium text-accent-700 hover:underline"
+                              className="text-xs inline-flex min-h-11 items-center font-medium text-accent-700 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-500"
                               onClick={async () => {
                                 if (
                                   await act.run(

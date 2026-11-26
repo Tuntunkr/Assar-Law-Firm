@@ -1,4 +1,5 @@
-import { Controller, Get, HttpException, Inject } from '@nestjs/common';
+import { Controller, Get, Inject, Res } from '@nestjs/common';
+import type { Response } from 'express';
 import { SkipThrottle } from '@nestjs/throttler';
 import { isDatabaseReady, mongoose } from '@assar/database';
 import type { JobQueues } from '@assar/jobs';
@@ -17,9 +18,13 @@ export class HealthController {
     return { status: 'ok' };
   }
 
-  /** Readiness: dependencies are reachable. */
+  /**
+   * Readiness: dependencies are reachable.
+   * The body is written here. The global error filter replaces 5xx HttpException
+   * payloads, which would hide which dependency failed.
+   */
   @Get('readyz')
-  async ready() {
+  async ready(@Res() res: Response) {
     const checks = { mongodb: 'failing', redis: 'failing' };
     try {
       if (isDatabaseReady()) {
@@ -35,9 +40,7 @@ export class HealthController {
     } catch {
       /* reported below */
     }
-    if (Object.values(checks).some((c) => c !== 'ok')) {
-      throw new HttpException({ status: 'not_ready', checks }, 503);
-    }
-    return { status: 'ready', checks };
+    const ready = Object.values(checks).every((c) => c === 'ok');
+    res.status(ready ? 200 : 503).json({ status: ready ? 'ready' : 'not_ready', checks });
   }
 }

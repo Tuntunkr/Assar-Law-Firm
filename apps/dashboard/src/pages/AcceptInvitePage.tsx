@@ -47,7 +47,7 @@ export function AcceptInvitePage() {
           <Alert tone="success">Your account is ready.</Alert>
           <Link
             to="/login"
-            className="inline-flex h-10 w-full items-center justify-center rounded-lg bg-accent-600 text-sm font-semibold text-white hover:bg-accent-700"
+            className="inline-flex h-11 w-full items-center justify-center rounded-lg bg-accent-600 text-sm font-semibold text-white hover:bg-accent-700"
           >
             Continue to sign in
           </Link>

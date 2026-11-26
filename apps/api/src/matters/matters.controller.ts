@@ -57,6 +57,16 @@ export class MattersController {
   }
 
   @RequirePermissions('matter:write')
+  @Post(':id/court/verify')
+  verifyCourt(
+    @Auth() auth: AuthContext,
+    @Param('id', ObjectIdPipe) id: string,
+    @Req() req: AppRequest,
+  ) {
+    return this.matters.verifyCourt(auth, id, req);
+  }
+
+  @RequirePermissions('matter:write')
   @Patch(':id')
   update(
     @Auth() auth: AuthContext,

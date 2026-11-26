@@ -53,6 +53,7 @@ const summaryDto = (i: Omit<InvoiceDoc, 'lines'> & { lines?: InvoiceDoc['lines']
   subtotalCents: i.subtotalCents,
   taxRateBp: i.taxRateBp,
   taxCents: i.taxCents,
+  accountantReviewedAt: i.accountantReviewedAt ?? null,
   totalCents: i.totalCents,
   amountPaidCents: i.amountPaidCents,
   balanceCents: i.balanceCents,
@@ -342,6 +343,10 @@ export class InvoicesService {
     const set: Record<string, unknown> = { ...computeTotals(inv.lines, taxRateBp), taxRateBp };
     if (patch.dueDays !== undefined) set.dueDays = patch.dueDays;
     if (patch.notes !== undefined) set.notes = patch.notes ?? undefined;
+    if (patch.taxRateBp !== undefined && patch.taxRateBp !== inv.taxRateBp) {
+      set.accountantReviewedAt = null;
+      set.accountantReviewedBy = null;
+    }
     const updated = await invoices.update(auth.organizationId, id, ['draft'], set);
     if (!updated) throw new ApiError(409, 'CONFLICT', 'Only draft invoices can be changed');
     await this.audit.record({
@@ -461,6 +466,31 @@ export class InvoicesService {
     });
   }
 
+  async recordAccountantReview(auth: AuthContext, id: string, req: Req) {
+    const inv = await this.editableDraft(auth, id, req);
+    if (inv.taxRateBp <= 0)
+      throw new ApiError(
+        409,
+        'CONFLICT',
+        'There is no tax on this draft. A review is required only when a tax rate has been typed.',
+      );
+    const updated = await invoices.update(auth.organizationId, id, ['draft'], {
+      accountantReviewedAt: new Date(),
+      accountantReviewedBy: auth.userId,
+    });
+    if (!updated) throw new ApiError(409, 'CONFLICT', 'Only draft invoices can be changed');
+    await this.audit.record({
+      organizationId: auth.organizationId,
+      actorId: auth.userId,
+      action: 'invoice.accountant_reviewed',
+      targetType: 'invoice',
+      targetId: id,
+      req,
+      meta: { taxRateBp: updated.taxRateBp },
+    });
+    return invoiceDto(updated);
+  }
+
   async issue(auth: AuthContext, id: string, req: Req) {
     const orgId = auth.organizationId;
     await this.load(auth, id, req);
@@ -472,6 +502,12 @@ export class InvoicesService {
         throw new ApiError(400, 'VALIDATION_FAILED', 'Add at least one line before issuing');
       if (cur.totalCents <= 0)
         throw new ApiError(400, 'VALIDATION_FAILED', 'The invoice total must be greater than zero');
+      if (cur.taxRateBp > 0 && !cur.accountantReviewedAt)
+        throw new ApiError(
+          409,
+          'CONFLICT',
+          'An accountant must review this taxed invoice before it is issued. This software does not choose a GST rate.',
+        );
       const number = await invoices.nextNumber(orgId, { session });
       const issuedAt = new Date();
       return invoices.update(

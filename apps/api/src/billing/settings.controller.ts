@@ -16,8 +16,16 @@ export class BillingSettingsController {
 
   @RequirePermissions('billing:read')
   @Get('settings')
-  get(@Auth() auth: AuthContext) {
-    return loadBilling(auth.organizationId);
+  async get(@Auth() auth: AuthContext) {
+    const settings = await loadBilling(auth.organizationId);
+    return {
+      ...settings,
+      policy: {
+        tax: 'explicit_rate_only' as const,
+        collection: 'manual_only' as const,
+        gst: 'not_determined' as const,
+      },
+    };
   }
 
   @RequirePermissions('billing:write')

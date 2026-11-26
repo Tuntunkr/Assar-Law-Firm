@@ -131,6 +131,17 @@ export class InvoicesController {
 
   @RequirePermissions('billing:write')
   @HttpCode(200)
+  @Post(':id/accountant-review')
+  reviewTax(
+    @Auth() auth: AuthContext,
+    @Param('id', ObjectIdPipe) id: string,
+    @Req() req: AppRequest,
+  ) {
+    return this.invoices.recordAccountantReview(auth, id, req);
+  }
+
+  @RequirePermissions('billing:write')
+  @HttpCode(200)
   @Post(':id/issue')
   issue(@Auth() auth: AuthContext, @Param('id', ObjectIdPipe) id: string, @Req() req: AppRequest) {
     return this.invoices.issue(auth, id, req);

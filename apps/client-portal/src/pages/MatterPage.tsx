@@ -1,5 +1,5 @@
 import { ApiClientError, type DownloadLink } from '@assar/api-client';
-import type { PortalDocument } from '@assar/types';
+import type { PortalDocument, PortalInvoice, PortalMessage } from '@assar/types';
 import { Alert, Badge, Button, Card, Skeleton } from '@assar/ui';
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
@@ -81,11 +81,62 @@ function DocumentRow({ doc }: { doc: PortalDocument }) {
   );
 }
 
+function money(cents: number, currency: string) {
+  try {
+    return new Intl.NumberFormat('en-IN', { style: 'currency', currency }).format(cents / 100);
+  } catch {
+    return `${currency} ${(cents / 100).toFixed(2)}`;
+  }
+}
+
+function InvoiceRow({ row }: { row: PortalInvoice }) {
+  return (
+    <li>
+      <Card>
+        <p className="font-medium text-navy-900">
+          {row.number ?? 'Invoice'} · {row.status === 'paid' ? 'Paid' : 'Issued'}
+        </p>
+        <p className="mt-1 text-sm text-navy-800">
+          {money(row.totalCents, row.currency)} total · {money(row.balanceCents, row.currency)}{' '}
+          remaining
+        </p>
+        {row.dueAt && <p className="mt-1 text-xs text-navy-600">Due {formatDate(row.dueAt)}</p>}
+      </Card>
+    </li>
+  );
+}
+
+function MessageRow({ row }: { row: PortalMessage }) {
+  const label =
+    row.status === 'mock_delivered'
+      ? 'Firm record. No provider receipt.'
+      : row.status === 'read' || row.status === 'played'
+        ? 'Read'
+        : row.status === 'delivered'
+          ? 'Delivered'
+          : row.status === 'sent' || row.status === 'accepted'
+            ? 'Accepted by the provider'
+            : row.status;
+  return (
+    <li>
+      <Card>
+        <p className="text-sm whitespace-pre-line text-navy-800">{row.body}</p>
+        <p className="mt-2 text-xs text-navy-600">
+          {row.channel} · {label}
+          {row.approvedAt ? ` · ${formatDate(row.approvedAt)}` : ''}
+        </p>
+      </Card>
+    </li>
+  );
+}
+
 export function MatterPage() {
   const { id = '' } = useParams();
   const { client } = useAuth();
   const matter = useAsync(() => client.getMatter(id), [client, id]);
   const docs = useAsync(() => client.listDocuments(id), [client, id]);
+  const invoices = useAsync(() => client.listInvoices(id), [client, id]);
+  const messages = useAsync(() => client.listMessages(id), [client, id]);
   const updates = useAsync(() => client.listAiOutputs(id), [client, id]);
 
   return (
@@ -140,6 +191,68 @@ export function MatterPage() {
                     <ul className="space-y-3">
                       {d.data.map((doc) => (
                         <DocumentRow key={doc.id} doc={doc} />
+                      ))}
+                    </ul>
+                  )}
+                </AsyncView>
+              </div>
+            </section>
+
+            <section aria-labelledby="invoices-heading" className="mt-8">
+              <h2 id="invoices-heading" className="text-lg font-semibold text-navy-900">
+                Invoices
+              </h2>
+              <p className="mt-1 text-sm text-navy-600">
+                Issued invoices for this matter. Payment is recorded by the firm. This page does not
+                collect a card.
+              </p>
+              <div className="mt-3">
+                <AsyncView
+                  state={invoices}
+                  onRetry={invoices.reload}
+                  skeleton={sectionSkeleton}
+                  isEmpty={(d) => d.data.length === 0}
+                  empty={
+                    <EmptyState title="No invoices">
+                      Nothing has been issued on this matter.
+                    </EmptyState>
+                  }
+                >
+                  {(d) => (
+                    <ul className="space-y-3">
+                      {d.data.map((row) => (
+                        <InvoiceRow key={row.id} row={row} />
+                      ))}
+                    </ul>
+                  )}
+                </AsyncView>
+              </div>
+            </section>
+
+            <section aria-labelledby="messages-heading" className="mt-8">
+              <h2 id="messages-heading" className="text-lg font-semibold text-navy-900">
+                Messages
+              </h2>
+              <p className="mt-1 text-sm text-navy-600">
+                Updates the firm has released. A draft that is still waiting for a lawyer is not
+                shown.
+              </p>
+              <div className="mt-3">
+                <AsyncView
+                  state={messages}
+                  onRetry={messages.reload}
+                  skeleton={sectionSkeleton}
+                  isEmpty={(d) => d.data.length === 0}
+                  empty={
+                    <EmptyState title="No messages">
+                      No released update is on this matter.
+                    </EmptyState>
+                  }
+                >
+                  {(d) => (
+                    <ul className="space-y-3">
+                      {d.data.map((row) => (
+                        <MessageRow key={row.id} row={row} />
                       ))}
                     </ul>
                   )}

@@ -35,6 +35,7 @@ const invoice: InvoiceDto = {
   dueDays: 14,
   notes: null,
   voidReason: null,
+  accountantReviewedAt: null,
   lines: [],
   payments: [],
   reminders: [],

@@ -122,7 +122,7 @@ const membershipSchema = new Schema<MembershipDoc>(
     role: {
       type: String,
       required: true,
-      enum: ['owner', 'admin', 'attorney', 'paralegal', 'billing', 'staff'],
+      enum: ['owner', 'admin', 'attorney', 'paralegal', 'billing', 'staff', 'intern'],
     },
     hourlyRateCents: { type: Number, default: null, min: 0 },
     status: { type: String, enum: ['active', 'disabled'], default: 'active' },
@@ -186,7 +186,7 @@ const invitationSchema = new Schema<InvitationDoc>(
     role: {
       type: String,
       required: true,
-      enum: ['admin', 'attorney', 'paralegal', 'billing', 'staff'],
+      enum: ['admin', 'attorney', 'paralegal', 'billing', 'staff', 'intern'],
     },
     tokenHash: { type: String, required: true, unique: true },
     invitedBy: { type: Schema.Types.ObjectId, required: true },
@@ -284,6 +284,8 @@ export interface ClientDoc {
   email?: string;
   phone?: string;
   address?: string;
+  /** Set when the client has opted out of WhatsApp. A set date blocks a WhatsApp send. */
+  whatsappOptOutAt?: Date | null;
   status: 'active' | 'archived';
   createdBy: Id;
   createdAt: Date;
@@ -298,6 +300,7 @@ const clientSchema = new Schema<ClientDoc>(
     email: { type: String, lowercase: true, trim: true, maxlength: 254 },
     phone: { type: String, maxlength: 40 },
     address: { type: String, maxlength: 500 },
+    whatsappOptOutAt: { type: Date, default: null },
     status: { type: String, enum: ['active', 'archived'], default: 'active' },
     createdBy: { type: Schema.Types.ObjectId, required: true },
   },
@@ -352,6 +355,14 @@ export interface MatterDoc {
     jurisdiction?: string;
     /** `YYYY-MM-DD` */
     filedOn?: string;
+    /** 16-character shape. Not a court lookup. */
+    cnr?: string;
+    officialUrl?: string;
+    /** `manual` = typed; `import` = applied from an authorised file-drop row. Never a live scrape. */
+    trackingSource?: 'manual' | 'import';
+    freshness?: 'unverified' | 'verified_manual';
+    verifiedAt?: Date | null;
+    verifiedBy?: Id | null;
   } | null;
   status: 'open' | 'pending' | 'closed' | 'archived';
   /** Restricted matters are visible only to users in matter_access (plus the owner, audited). */
@@ -386,6 +397,16 @@ const matterSchema = new Schema<MatterDoc>(
           courtroom: { type: String, maxlength: 100 },
           jurisdiction: { type: String, maxlength: 150 },
           filedOn: { type: String, match: /^\d{4}-\d{2}-\d{2}$/ },
+          cnr: { type: String, uppercase: true, match: /^[A-Z0-9]{16}$/ },
+          officialUrl: { type: String, maxlength: 500 },
+          trackingSource: { type: String, enum: ['manual', 'import'], default: 'manual' },
+          freshness: {
+            type: String,
+            enum: ['unverified', 'verified_manual'],
+            default: 'unverified',
+          },
+          verifiedAt: { type: Date, default: null },
+          verifiedBy: { type: Schema.Types.ObjectId, default: null },
         },
         { _id: false },
       ),
@@ -408,6 +429,8 @@ matterSchema.index({ organizationId: 1, _id: -1 });
 matterSchema.index({ organizationId: 1, status: 1, _id: -1 });
 matterSchema.index({ organizationId: 1, clientId: 1, _id: -1 });
 matterSchema.index({ organizationId: 1, titleLower: 1 });
+matterSchema.index({ organizationId: 1, 'court.cnr': 1 });
+matterSchema.index({ organizationId: 1, 'court.name': 1 });
 export const MatterModel = define<MatterDoc>('Matter', matterSchema);
 
 export interface MatterAccessDoc {
@@ -705,8 +728,18 @@ export interface CalendarEventDoc {
   location?: string;
   attendeeIds: Id[];
   status: 'scheduled' | 'completed' | 'cancelled';
-  /** Deadlines are only ever entered by people (or confirmed from AI suggestions in a later phase). */
+  /** Entered by a person. Court systems do not write this row. */
   source: 'manual';
+  outcome?: {
+    result: string;
+    notes: string;
+    nextHearingOn?: string | null;
+    reviewStatus: 'draft' | 'reviewed';
+    recordedBy: Id;
+    recordedAt: Date;
+    reviewedBy?: Id | null;
+    reviewedAt?: Date | null;
+  } | null;
   createdBy: Id;
   createdAt: Date;
   updatedAt: Date;
@@ -725,6 +758,22 @@ const eventSchema = new Schema<CalendarEventDoc>(
     attendeeIds: { type: [Schema.Types.ObjectId], default: [] },
     status: { type: String, enum: ['scheduled', 'completed', 'cancelled'], default: 'scheduled' },
     source: { type: String, enum: ['manual'], default: 'manual' },
+    outcome: {
+      type: new Schema(
+        {
+          result: { type: String, required: true },
+          notes: { type: String, required: true, maxlength: 5000 },
+          nextHearingOn: { type: String, match: /^\d{4}-\d{2}-\d{2}$/ },
+          reviewStatus: { type: String, enum: ['draft', 'reviewed'], required: true },
+          recordedBy: { type: Schema.Types.ObjectId, required: true },
+          recordedAt: { type: Date, required: true },
+          reviewedBy: { type: Schema.Types.ObjectId, default: null },
+          reviewedAt: { type: Date, default: null },
+        },
+        { _id: false },
+      ),
+      default: null,
+    },
     createdBy: { type: Schema.Types.ObjectId, required: true },
   },
   { timestamps: true },
@@ -1148,6 +1197,9 @@ export interface InvoiceDoc {
   subtotalCents: number;
   taxRateBp: number;
   taxCents: number;
+  /** Set only after a person records an accountant review. Required before a taxed invoice can be issued. */
+  accountantReviewedAt?: Date | null;
+  accountantReviewedBy?: Id | null;
   totalCents: number;
   amountPaidCents: number;
   balanceCents: number;
@@ -1196,6 +1248,8 @@ const invoiceSchema = new Schema<InvoiceDoc>(
     subtotalCents: { type: Number, default: 0 },
     taxRateBp: { type: Number, default: 0, min: 0, max: 10000 },
     taxCents: { type: Number, default: 0 },
+    accountantReviewedAt: { type: Date, default: null },
+    accountantReviewedBy: { type: Schema.Types.ObjectId, default: null },
     totalCents: { type: Number, default: 0 },
     amountPaidCents: { type: Number, default: 0 },
     balanceCents: { type: Number, default: 0 },
@@ -1292,4 +1346,328 @@ assistantMessageSchema.index({ organizationId: 1, threadId: 1, createdAt: 1 });
 export const AssistantMessageModel = define<AssistantMessageDoc>(
   'AssistantMessage',
   assistantMessageSchema,
+);export const DEADLINE_STATUSES = [
+  'draft',
+  'pending_approval',
+  'approved',
+  'rejected',
+  'closed',
+] as const;
+export interface DeadlineDoc {
+  _id: Id;
+  organizationId: Id;
+  matterId: Id;
+  kind: 'limitation' | 'other_deadline';
+  title: string;
+  basisNote: string;
+  /** `YYYY-MM-DD` in Asia/Kolkata. Typed by a person. */
+  dueOn: string;
+  reminderDaysBefore: number[];
+  escalateAfterDays: number;
+  status: (typeof DEADLINE_STATUSES)[number];
+  history: { at: Date; actorId: Id; action: string; note?: string | null }[];
+  approvedBy?: Id | null;
+  approvedAt?: Date | null;
+  createdBy: Id;
+  createdAt: Date;
+  updatedAt: Date;
+}
+const deadlineSchema = new Schema<DeadlineDoc>(
+  {
+    organizationId: { type: Schema.Types.ObjectId, required: true },
+    matterId: { type: Schema.Types.ObjectId, required: true },
+    kind: { type: String, enum: ['limitation', 'other_deadline'], required: true },
+    title: { type: String, required: true, trim: true, maxlength: 200 },
+    basisNote: { type: String, required: true, maxlength: 5000 },
+    dueOn: { type: String, required: true, match: /^\d{4}-\d{2}-\d{2}$/ },
+    reminderDaysBefore: { type: [Number], default: [7, 3, 1, 0] },
+    escalateAfterDays: { type: Number, default: 1 },
+    status: { type: String, enum: DEADLINE_STATUSES, default: 'draft' },
+    history: {
+      type: [
+        new Schema(
+          {
+            at: { type: Date, required: true },
+            actorId: { type: Schema.Types.ObjectId, required: true },
+            action: { type: String, required: true },
+            note: { type: String, maxlength: 500, default: null },
+          },
+          { _id: false },
+        ),
+      ],
+      default: [],
+    },
+    approvedBy: { type: Schema.Types.ObjectId, default: null },
+    approvedAt: { type: Date, default: null },
+    createdBy: { type: Schema.Types.ObjectId, required: true },
+  },
+  { timestamps: true },
 );
+deadlineSchema.index({ organizationId: 1, matterId: 1, dueOn: 1 });
+deadlineSchema.index({ organizationId: 1, status: 1, dueOn: 1 });
+export const DeadlineModel = define<DeadlineDoc>('Deadline', deadlineSchema);
+
+export interface OutboxDoc {
+  _id: Id;
+  organizationId: Id;
+  clientId: Id;
+  matterId?: Id | null;
+  channel: 'email' | 'whatsapp';
+  templateLabel: string;
+  /** Cloud API template name. Present does not mean Meta has approved it. */
+  templateName?: string | null;
+  templateLanguage?: string | null;
+  bodyParameters?: string[];
+  body: string;
+  /** Always `not_claimed`. This product does not mark a provider template as approved. */
+  providerTemplateApproval: 'not_claimed';
+  consent: {
+    optedIn: true;
+    namesFirm: true;
+    note?: string | null;
+    recordedBy: Id;
+    recordedAt: Date;
+  };
+  status:
+    | 'draft'
+    | 'pending_approval'
+    | 'rejected'
+    | 'mock_delivered'
+    | 'external_activation_gate'
+    | 'held_local'
+    | 'accepted'
+    | 'sent'
+    | 'delivered'
+    | 'read'
+    | 'played'
+    | 'failed';
+  provider: 'mock' | 'unconfigured' | 'whatsapp_cloud' | 'local_mailbox' | 'smtp';
+  attempts: number;
+  providerMessageId?: string;
+  providerError?: string | null;
+  approvedBy?: Id | null;
+  approvedAt?: Date | null;
+  webhookEventIds: string[];
+  createdBy: Id;
+  createdAt: Date;
+  updatedAt: Date;
+}
+const outboxSchema = new Schema<OutboxDoc>(
+  {
+    organizationId: { type: Schema.Types.ObjectId, required: true },
+    clientId: { type: Schema.Types.ObjectId, required: true },
+    matterId: { type: Schema.Types.ObjectId, default: null },
+    channel: { type: String, enum: ['email', 'whatsapp'], required: true },
+    templateLabel: { type: String, required: true, maxlength: 120 },
+    templateName: { type: String, maxlength: 512 },
+    templateLanguage: { type: String, maxlength: 16 },
+    bodyParameters: { type: [String], default: [] },
+    body: { type: String, required: true, maxlength: 5000 },
+    providerTemplateApproval: { type: String, enum: ['not_claimed'], default: 'not_claimed' },
+    consent: {
+      type: new Schema(
+        {
+          optedIn: { type: Boolean, required: true },
+          namesFirm: { type: Boolean, required: true },
+          note: { type: String, maxlength: 500, default: null },
+          recordedBy: { type: Schema.Types.ObjectId, required: true },
+          recordedAt: { type: Date, required: true },
+        },
+        { _id: false },
+      ),
+      required: true,
+    },
+    status: {
+      type: String,
+      enum: [
+        'draft',
+        'pending_approval',
+        'rejected',
+        'mock_delivered',
+        'external_activation_gate',
+        'held_local',
+        'accepted',
+        'sent',
+        'delivered',
+        'read',
+        'played',
+        'failed',
+      ],
+      default: 'draft',
+    },
+    provider: {
+      type: String,
+      enum: ['mock', 'unconfigured', 'whatsapp_cloud', 'local_mailbox', 'smtp'],
+      default: 'unconfigured',
+    },
+    attempts: { type: Number, default: 0 },
+    providerMessageId: { type: String },
+    providerError: { type: String, maxlength: 80, default: null },
+    approvedBy: { type: Schema.Types.ObjectId, default: null },
+    approvedAt: { type: Date, default: null },
+    webhookEventIds: { type: [String], default: [] },
+    createdBy: { type: Schema.Types.ObjectId, required: true },
+  },
+  { timestamps: true },
+);
+outboxSchema.index({ organizationId: 1, _id: -1 });
+outboxSchema.index({ organizationId: 1, status: 1, _id: -1 });
+outboxSchema.index({ organizationId: 1, clientId: 1, matterId: 1, status: 1 });
+outboxSchema.index({ providerMessageId: 1 }, { unique: true, sparse: true });
+export const OutboxModel = define<OutboxDoc>('Outbox', outboxSchema);
+
+/** A cause-list row the firm imported. This server did not fetch it. */
+export interface CourtImportDoc {
+  _id: Id;
+  organizationId: Id;
+  sourceName: string;
+  externalId: string;
+  payloadHash: string;
+  courtName: string;
+  caseNumber: string;
+  title: string;
+  listedOn: string;
+  sourceUrl: string;
+  retrievedAt: Date;
+  status: 'stored' | 'stale' | 'error';
+  error: string | null;
+  importedBy: Id;
+  /** Set only after a person applies the row to a matter. */
+  appliedToMatterId?: Id | null;
+  appliedAt?: Date | null;
+  appliedBy?: Id | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+const courtImportSchema = new Schema<CourtImportDoc>(
+  {
+    organizationId: { type: Schema.Types.ObjectId, required: true },
+    sourceName: { type: String, required: true, maxlength: 120 },
+    externalId: { type: String, required: true, maxlength: 80 },
+    payloadHash: { type: String, required: true, maxlength: 64 },
+    courtName: { type: String, required: true, maxlength: 200 },
+    caseNumber: { type: String, required: true, maxlength: 100 },
+    title: { type: String, required: true, maxlength: 200 },
+    listedOn: { type: String, required: true, maxlength: 10 },
+    sourceUrl: { type: String, required: true, maxlength: 500 },
+    retrievedAt: { type: Date, required: true },
+    status: { type: String, enum: ['stored', 'stale', 'error'], required: true },
+    error: { type: String, maxlength: 300, default: null },
+    importedBy: { type: Schema.Types.ObjectId, required: true },
+    appliedToMatterId: { type: Schema.Types.ObjectId, default: null },
+    appliedAt: { type: Date, default: null },
+    appliedBy: { type: Schema.Types.ObjectId, default: null },
+  },
+  { timestamps: true },
+);
+courtImportSchema.index({ organizationId: 1, sourceName: 1, externalId: 1 }, { unique: true });
+export const CourtImportModel = define<CourtImportDoc>('CourtImport', courtImportSchema);
+
+/** An approved email kept on this machine. Nothing was handed to an SMTP server. */
+export interface LocalMailboxDoc {
+  _id: Id;
+  organizationId: Id;
+  outboxId: Id;
+  to: string;
+  subject: string;
+  body: string;
+  status: 'held_local';
+  createdAt: Date;
+  updatedAt: Date;
+}
+const localMailboxSchema = new Schema<LocalMailboxDoc>(
+  {
+    organizationId: { type: Schema.Types.ObjectId, required: true },
+    outboxId: { type: Schema.Types.ObjectId, required: true },
+    to: { type: String, required: true, maxlength: 254 },
+    subject: { type: String, required: true, maxlength: 200 },
+    body: { type: String, required: true, maxlength: 5000 },
+    status: { type: String, enum: ['held_local'], default: 'held_local' },
+  },
+  { timestamps: true },
+);
+localMailboxSchema.index({ organizationId: 1, outboxId: 1 }, { unique: true });
+export const LocalMailboxModel = define<LocalMailboxDoc>('LocalMailbox', localMailboxSchema);
+
+/** A synthetic demo booking. No calendar provider is called. */
+export interface DemoBookingDoc {
+  _id: Id;
+  name: string;
+  email: string;
+  firm: string;
+  firmSize: string;
+  message: string | null;
+  slotStart: Date;
+  status: 'recorded_local';
+  notification: 'not_sent';
+  createdAt: Date;
+  updatedAt: Date;
+}
+const demoBookingSchema = new Schema<DemoBookingDoc>(
+  {
+    name: { type: String, required: true, maxlength: 100 },
+    email: { type: String, required: true, maxlength: 254 },
+    firm: { type: String, required: true, maxlength: 150 },
+    firmSize: { type: String, required: true, maxlength: 20 },
+    message: { type: String, maxlength: 2000, default: null },
+    slotStart: { type: Date, required: true },
+    status: { type: String, enum: ['recorded_local'], default: 'recorded_local' },
+    notification: { type: String, enum: ['not_sent'], default: 'not_sent' },
+  },
+  { timestamps: true },
+);
+demoBookingSchema.index({ slotStart: 1 }, { unique: true });
+export const DemoBookingModel = define<DemoBookingDoc>('DemoBooking', demoBookingSchema);
+
+/**
+ * A versioned draft of a court form. `legally_approved` means a person with form:approve
+ * signed the declaration. It is not a bar-license check and not an AI decision.
+ */
+export interface CourtFormDoc {
+  _id: Id;
+  organizationId: Id;
+  title: string;
+  jurisdiction: string;
+  caseType: string;
+  body: string;
+  officialSourceTitle: string;
+  officialSourceUrl: string;
+  sourceRetrievedOn: string;
+  version: number;
+  status: 'draft' | 'legally_approved' | 'rejected';
+  advocateDeclaration: boolean;
+  signoffNote: string | null;
+  decidedBy: Id | null;
+  decidedAt: Date | null;
+  licenseCheck: 'not_performed';
+  createdBy: Id;
+  createdAt: Date;
+  updatedAt: Date;
+}
+const courtFormSchema = new Schema<CourtFormDoc>(
+  {
+    organizationId: { type: Schema.Types.ObjectId, required: true },
+    title: { type: String, required: true, maxlength: 200 },
+    jurisdiction: { type: String, required: true, maxlength: 150, default: 'unknown' },
+    caseType: { type: String, required: true, maxlength: 150, default: 'unknown' },
+    body: { type: String, required: true, maxlength: 50_000 },
+    officialSourceTitle: { type: String, required: true, maxlength: 200 },
+    officialSourceUrl: { type: String, required: true, maxlength: 500 },
+    sourceRetrievedOn: { type: String, required: true, maxlength: 10 },
+    version: { type: Number, default: 1 },
+    status: {
+      type: String,
+      enum: ['draft', 'legally_approved', 'rejected'],
+      default: 'draft',
+    },
+    advocateDeclaration: { type: Boolean, default: false },
+    signoffNote: { type: String, maxlength: 2000, default: null },
+    decidedBy: { type: Schema.Types.ObjectId, default: null },
+    decidedAt: { type: Date, default: null },
+    licenseCheck: { type: String, enum: ['not_performed'], default: 'not_performed' },
+    createdBy: { type: Schema.Types.ObjectId, required: true },
+  },
+  { timestamps: true },
+);
+courtFormSchema.index({ organizationId: 1, _id: -1 });
+export const CourtFormModel = define<CourtFormDoc>('CourtForm', courtFormSchema);

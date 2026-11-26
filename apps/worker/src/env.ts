@@ -1,3 +1,4 @@
+import { webhookHostProblem } from '@assar/types';
 import { z } from 'zod';
 
 const bool = z.enum(['true', 'false']).transform((v) => v === 'true');
@@ -81,6 +82,11 @@ const schema = z
       issue('N8N_WEBHOOK_SECRET', 'Required (min 16 chars) when N8N_WEBHOOK_BASE_URL is set');
     if (e.N8N_WEBHOOK_BASE_URL?.startsWith('http://') && e.NODE_ENV === 'production')
       issue('N8N_WEBHOOK_BASE_URL', 'Use https:// in production');
+    if (e.N8N_WEBHOOK_BASE_URL && webhookHostProblem(e.N8N_WEBHOOK_BASE_URL) === 'example-host')
+      issue(
+        'N8N_WEBHOOK_BASE_URL',
+        'example.com is documentation only and is not an active webhook',
+      );
     if (e.GROK_API_KEY && !e.GROK_MODEL)
       issue('GROK_MODEL', 'Required when GROK_API_KEY is set (no model is assumed)');
     if (e.STORAGE_DRIVER === 'local' && !e.SESSION_SECRET)

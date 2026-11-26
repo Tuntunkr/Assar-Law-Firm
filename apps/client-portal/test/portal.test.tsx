@@ -66,6 +66,8 @@ function makeClient(over: Partial<Record<keyof PortalClient, unknown>> = {}) {
     listMatters: vi.fn().mockResolvedValue({ data: [matter] }),
     getMatter: vi.fn().mockResolvedValue(matter),
     listDocuments: vi.fn().mockResolvedValue({ data: [doc] }),
+    listInvoices: vi.fn().mockResolvedValue({ data: [] }),
+    listMessages: vi.fn().mockResolvedValue({ data: [] }),
     downloadLink: vi.fn().mockResolvedValue({
       url: 'https://files.test/x',
       method: 'GET',
@@ -302,6 +304,8 @@ describe('a matter', () => {
       '/matters/m1',
     );
     expect(await screen.findByText('No documents shared yet')).toBeInTheDocument();
+    expect(await screen.findByText('No invoices')).toBeInTheDocument();
+    expect(await screen.findByText('No messages')).toBeInTheDocument();
     expect(await screen.findByText('No updates yet')).toBeInTheDocument();
   });
 });

@@ -14,6 +14,9 @@ import {
   PARTY_ROLES,
   PRACTICE_AREAS,
   SERVICE_SCOPES,
+  HEARING_RESULTS,
+  DEADLINE_KINDS,
+  MESSAGE_CHANNELS,
 } from '@assar/types';
 
 export const emailSchema = z.string().trim().toLowerCase().email().max(254);
@@ -70,7 +73,7 @@ export const mfaDisableSchema = z.object({
   code: totpCodeSchema,
 });
 
-const INVITABLE_ROLES = ['admin', 'attorney', 'paralegal', 'billing', 'staff'] as const;
+const INVITABLE_ROLES = ['admin', 'attorney', 'paralegal', 'billing', 'staff', 'intern'] as const;
 export const createInvitationSchema = z.object({
   email: emailSchema,
   role: z.enum(INVITABLE_ROLES),
@@ -128,6 +131,20 @@ export const courtSchema = z.object({
   courtroom: optionalText(100),
   jurisdiction: optionalText(150),
   filedOn: dateOnly.optional(),
+  /** Shape check only. Omitted when blank. Not evidence the case exists. */
+  cnr: z
+    .string()
+    .trim()
+    .toUpperCase()
+    .regex(/^[A-Z0-9]{16}$/, 'CNR must be 16 letters or digits. This checks the shape only.')
+    .optional(),
+  officialUrl: z
+    .string()
+    .trim()
+    .url()
+    .max(500)
+    .refine((u) => u.startsWith('https://'), 'Use an https link')
+    .optional(),
 });
 
 export const createMatterSchema = z.object({
@@ -290,6 +307,113 @@ export const updateEventSchema = z
   .object({ ...eventFields, status: z.enum(['scheduled', 'completed', 'cancelled']) })
   .partial()
   .refine((v) => Object.keys(v).length > 0, 'Provide at least one field');
+
+export const hearingOutcomeSchema = z.object({
+  result: z.enum(HEARING_RESULTS),
+  notes: z.string().trim().min(1).max(5000),
+  nextHearingOn: dateOnly.optional(),
+});
+
+export const deadlineFields = {
+  matterId: objectIdSchema,
+  kind: z.enum(DEADLINE_KINDS),
+  title: z.string().trim().min(2).max(200),
+  /** Why this date was typed. Not a statute and not a model output. */
+  basisNote: z.string().trim().min(2).max(5000),
+  dueOn: dateOnly,
+  reminderDaysBefore: z.array(z.number().int().min(0).max(365)).max(8).default([7, 3, 1, 0]),
+  escalateAfterDays: z.number().int().min(0).max(365).default(1),
+};
+export const createDeadlineSchema = z.object(deadlineFields);
+export const updateDeadlineSchema = z
+  .object(deadlineFields)
+  .partial()
+  .refine((v) => Object.keys(v).length > 0, 'Provide at least one field');
+
+export const outboxDraftSchema = z
+  .object({
+    clientId: objectIdSchema,
+    matterId: objectIdSchema.optional(),
+    channel: z.enum(MESSAGE_CHANNELS),
+    templateLabel: z.string().trim().min(2).max(120),
+    /** Cloud API template name. Saving it does not mean the template is approved. */
+    templateName: z
+      .string()
+      .trim()
+      .regex(/^[a-z0-9_]{1,512}$/)
+      .optional(),
+    templateLanguage: z
+      .string()
+      .trim()
+      .regex(/^[a-z]{2,3}(_[A-Z]{2})?$/)
+      .optional(),
+    bodyParameters: z.array(z.string().trim().min(1).max(200)).max(10).optional(),
+    body: z.string().trim().min(2).max(5000),
+    consent: z.object({
+      optedIn: z.literal(true),
+      namesFirm: z.literal(true),
+      note: z.string().trim().max(500).optional(),
+    }),
+  })
+  .refine((v) => Boolean(v.templateName) === Boolean(v.templateLanguage), {
+    message: 'A WhatsApp template needs both a name and a language. Neither means it is approved.',
+    path: ['templateName'],
+  });
+
+export const whatsappOptOutSchema = z.object({ optedOut: z.boolean() });
+
+const httpsUrl = z
+  .string()
+  .trim()
+  .url()
+  .max(500)
+  .refine((u) => u.startsWith('https://'), 'Use an https link');
+
+export const courtImportRowSchema = z.object({
+  externalId: z.string().trim().min(1).max(80),
+  courtName: z.string().trim().min(2).max(200),
+  caseNumber: z.string().trim().min(1).max(100),
+  title: z.string().trim().min(2).max(200),
+  listedOn: dateOnly,
+  sourceName: z.string().trim().min(2).max(120),
+  sourceUrl: httpsUrl,
+  retrievedAt: z.string().datetime({ offset: true }),
+  retry: z.boolean().optional(),
+});
+export const courtImportBatchSchema = z.object({
+  rows: z.array(courtImportRowSchema).min(1).max(50),
+});
+/** A person copies an imported row onto a matter. This is not a court lookup. */
+export const applyCourtImportSchema = z.object({
+  matterId: objectIdSchema,
+  note: z.string().trim().min(2).max(500).optional(),
+});
+
+export const demoBookingSchema = demoRequestSchema.extend({
+  slotStart: z.string().datetime({ offset: true }),
+});
+
+export const courtFormDraftSchema = z.object({
+  title: z.string().trim().min(2).max(200),
+  jurisdiction: z.string().trim().min(2).max(150).default('unknown'),
+  caseType: z.string().trim().min(2).max(150).default('unknown'),
+  body: z.string().trim().min(2).max(50_000),
+  officialSourceTitle: z.string().trim().min(2).max(200),
+  officialSourceUrl: httpsUrl,
+  sourceRetrievedOn: dateOnly,
+});
+export const courtFormSignoffSchema = z.object({
+  decision: z.enum(['legally_approved', 'rejected']),
+  /** The person states they are a licensed advocate. The software does not check a roll. */
+  advocateDeclaration: z.literal(true),
+  note: z.string().trim().min(10).max(2000),
+});
+
+export const webhookAckSchema = z.object({
+  eventId: z.string().trim().min(8).max(200),
+  outboxId: objectIdSchema,
+  status: z.literal('mock_ack'),
+});
 
 const MAX_RANGE_MS = 366 * 24 * 3600_000;
 export const eventListQuerySchema = paginationSchema

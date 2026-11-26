@@ -1,4 +1,12 @@
-export const ROLES = ['owner', 'admin', 'attorney', 'paralegal', 'billing', 'staff'] as const;
+export const ROLES = [
+  'owner',
+  'admin',
+  'attorney',
+  'paralegal',
+  'billing',
+  'staff',
+  'intern',
+] as const;
 export type Role = (typeof ROLES)[number];
 
 /** Roles that must have MFA enabled. */
@@ -25,6 +33,14 @@ export const PERMISSIONS = [
   'workflow:manage',
   'portal:manage',
   'time:write',
+  /** Mark a hearing outcome reviewed. Owner and attorney only. */
+  'hearing:review',
+  /** Approve a date the firm typed. Not a statutory calculation. */
+  'deadline:approve',
+  /** Approve a client-message preview. Does not itself send. */
+  'message:approve',
+  /** Mark a draft court form legally approved. Not a bar-license check. */
+  'form:approve',
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 
@@ -80,9 +96,16 @@ export interface SourceReference {
 }
 
 /** Static role → permission mapping. Matter-level restrictions are checked separately. */
+const LAWYER_ONLY: readonly Permission[] = [
+  'hearing:review',
+  'deadline:approve',
+  'message:approve',
+  'form:approve',
+];
+
 export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
   owner: PERMISSIONS,
-  admin: PERMISSIONS.filter((p) => p !== 'billing:write'),
+  admin: PERMISSIONS.filter((p) => p !== 'billing:write' && !LAWYER_ONLY.includes(p)),
   attorney: [
     'client:read',
     'client:write',
@@ -98,6 +121,10 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'assistant:use',
     'portal:manage',
     'time:write',
+    'hearing:review',
+    'deadline:approve',
+    'message:approve',
+    'form:approve',
   ],
   paralegal: [
     'client:read',
@@ -122,6 +149,8 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'calendar:write',
     'assistant:use',
   ],
+  /** Assigned matters and own tasks only. Enforcement is in the access service, not only this list. */
+  intern: ['matter:read', 'document:read', 'task:write'],
 };
 
 export function hasPermission(role: Role, permission: Permission): boolean {
@@ -202,6 +231,25 @@ export interface PortalMatter {
   openedAt: string;
   closedAt: string | null;
 }
+export interface PortalInvoice {
+  id: string;
+  matterId: string;
+  number: string | null;
+  status: 'issued' | 'paid';
+  currency: string;
+  totalCents: number;
+  balanceCents: number;
+  issuedAt: string | null;
+  dueAt: string | null;
+}
+export interface PortalMessage {
+  id: string;
+  matterId: string;
+  channel: 'email' | 'whatsapp';
+  body: string;
+  status: string;
+  approvedAt: string | null;
+}
 export interface PortalDocument {
   id: string;
   matterId: string;
@@ -256,3 +304,4 @@ export function taxAmountCents(amountCents: number, rateBp: number): number {
 export * from './templates.js';
 export * from './reminders.js';
 export * from './assistant.js';
+export * from './practice.js';

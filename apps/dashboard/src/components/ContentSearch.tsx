@@ -44,7 +44,7 @@ export function ContentSearch({
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <button
                   type="button"
-                  className="font-medium text-accent-700 hover:underline"
+                  className="inline-flex min-h-11 items-center font-medium text-accent-700 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-500"
                   onClick={() => onOpen(h.documentId)}
                 >
                   {h.title}

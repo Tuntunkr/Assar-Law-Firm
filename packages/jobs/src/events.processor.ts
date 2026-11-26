@@ -1,4 +1,5 @@
 import { createHmac } from 'node:crypto';
+import { webhookHostProblem } from '@assar/types';
 import { UnrecoverableError, type Job } from 'bullmq';
 import type { JobLogger, WorkflowEventData } from './names.js';
 
@@ -33,6 +34,8 @@ export function signEvent(secret: string, timestamp: string, body: string): stri
 export function createEventsProcessor(deps: EventsProcessorDeps) {
   const doFetch = deps.fetch ?? globalThis.fetch;
   return async (job: Job<WorkflowEventData>): Promise<void> => {
+    if (webhookHostProblem(deps.baseUrl) === 'example-host')
+      throw new UnrecoverableError('example.com is not an active webhook');
     const body = JSON.stringify({ id: job.id, ...job.data });
     const timestamp = String(Math.floor(Date.now() / 1000));
     let status: number;

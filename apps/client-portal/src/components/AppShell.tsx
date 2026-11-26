@@ -4,7 +4,7 @@ import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-do
 import { useAuth } from '../lib/auth';
 
 const linkClass = ({ isActive }: { isActive: boolean }) =>
-  `rounded-lg px-3 py-2 text-sm font-medium ${isActive ? 'bg-navy-900 text-white' : 'text-navy-700 hover:bg-navy-50'}`;
+  `inline-flex min-h-11 items-center rounded-lg px-3 py-2 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-500 ${isActive ? 'bg-navy-900 text-white' : 'text-navy-700 hover:bg-navy-50'}`;
 
 export function AppShell() {
   const { state, logout } = useAuth();
@@ -23,13 +23,16 @@ export function AppShell() {
     <div className="flex min-h-screen flex-col">
       <a
         href="#content"
-        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded focus:bg-white focus:px-3 focus:py-2"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:inline-flex focus:min-h-11 focus:items-center focus:rounded focus:bg-white focus:px-3 focus:py-2"
       >
         Skip to content
       </a>
       <header className="border-b border-navy-100 bg-white">
         <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3 px-5 py-3">
-          <Link to="/" className="text-lg font-semibold tracking-tight text-navy-900">
+          <Link
+            to="/"
+            className="inline-flex min-h-11 items-center text-lg font-semibold tracking-tight text-navy-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-500"
+          >
             {me.organization.name}
           </Link>
           <nav aria-label="Main" className="flex items-center gap-1">
@@ -62,7 +65,7 @@ export function AppShell() {
         id="content"
         ref={main}
         tabIndex={-1}
-        className="mx-auto w-full max-w-5xl flex-1 px-5 py-8 outline-none"
+        className="mx-auto w-full min-w-0 max-w-5xl flex-1 px-5 py-8 outline-none"
       >
         <Outlet />
       </main>

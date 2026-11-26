@@ -51,12 +51,17 @@ describe('loadWorkerEnv', () => {
     expect(() => loadWorkerEnv({ ...base2, N8N_WEBHOOK_SECRET: 'short' })).toThrow(
       /N8N_WEBHOOK_SECRET/,
     );
-    expect(
-      loadWorkerEnv({ ...base2, N8N_WEBHOOK_SECRET: 'a-long-enough-shared-secret' })
-        .N8N_WEBHOOK_BASE_URL,
-    ).toContain('n8n.example.com');
+    expect(() =>
+      loadWorkerEnv({ ...base2, N8N_WEBHOOK_SECRET: 'a-long-enough-shared-secret' }),
+    ).toThrow(/example.com/);
+    const live = {
+      ...base,
+      N8N_WEBHOOK_BASE_URL: 'https://n8n.internal.test/webhook/assar',
+      N8N_WEBHOOK_SECRET: 'a-long-enough-shared-secret',
+    };
+    expect(loadWorkerEnv(live).N8N_WEBHOOK_BASE_URL).toContain('n8n.internal.test');
     const prod = {
-      ...base2,
+      ...live,
       N8N_WEBHOOK_SECRET: 'a-long-enough-shared-secret',
       NODE_ENV: 'production',
       STORAGE_DRIVER: 's3',

@@ -32,6 +32,8 @@ import { StorageModule } from './storage/storage.module';
 import { SystemModule } from './system/system.module';
 import { TasksModule } from './tasks/tasks.module';
 import { TeamsModule } from './teams/teams.module';
+import { ActivationModule } from './activation/activation.module';
+import { PracticeModule } from './practice/practice.module';
 import { TemplatesModule } from './templates/templates.module';
 import { TimelineModule } from './timeline/timeline.module';
 
@@ -75,6 +77,8 @@ export class AppModule {
         BillingModule,
         TimelineModule,
         TemplatesModule,
+        PracticeModule,
+        ActivationModule,
         AssistantModule,
       ],
       controllers: [HealthController],

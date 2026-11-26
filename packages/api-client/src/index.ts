@@ -3,8 +3,10 @@ import type {
   ErrorCode,
   PortalAiOutput,
   PortalDocument,
+  PortalInvoice,
   PortalMatter,
   PortalMe,
+  PortalMessage,
 } from '@assar/types';
 
 /** A failed API call, with the stable error code and request id from the API's error envelope. */
@@ -128,6 +130,10 @@ export function createPortalClient(options: ClientOptions) {
         'POST',
         `/v1/portal/documents/${documentId}/versions/${version}/download-link`,
       ),
+    listInvoices: (matterId: string) =>
+      http.request<{ data: PortalInvoice[] }>('GET', `/v1/portal/matters/${matterId}/invoices`),
+    listMessages: (matterId: string) =>
+      http.request<{ data: PortalMessage[] }>('GET', `/v1/portal/matters/${matterId}/messages`),
     listAiOutputs: (matterId: string) =>
       http.request<{ data: PortalAiOutput[] }>('GET', `/v1/portal/matters/${matterId}/ai-outputs`),
     getAiOutput: (id: string) => http.request<PortalAiOutput>('GET', `/v1/portal/ai-outputs/${id}`),

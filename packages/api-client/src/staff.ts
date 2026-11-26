@@ -37,6 +37,29 @@ export interface CourtDto {
   courtroom: string | null;
   jurisdiction: string | null;
   filedOn: string | null;
+  cnr?: string | null;
+  officialUrl?: string | null;
+  trackingSource?: 'manual' | 'import';
+  freshness?: 'unverified' | 'verified_manual';
+  stale?: boolean;
+  verifiedAt?: string | null;
+  lookup?: 'not_performed';
+}
+export interface CourtImportDto {
+  id: string;
+  sourceName: string;
+  externalId: string;
+  courtName: string;
+  caseNumber: string;
+  title: string;
+  listedOn: string;
+  sourceUrl: string;
+  retrievedAt: string;
+  status: 'stored' | 'stale' | 'error';
+  error: string | null;
+  appliedToMatter: boolean;
+  appliedToMatterId: string | null;
+  appliedAt: string | null;
 }
 export interface MatterDto {
   id: string;
@@ -51,7 +74,11 @@ export interface MatterDto {
   portalVisible: boolean;
   portalNote: string | null;
   leadAttorneyId: string | null;
+  /** Name of the lead when they are an active member of this firm. Not a directory. */
+  leadAttorneyName?: string | null;
   teamIds: string[];
+  /** Teams already linked to this matter. Names only. */
+  teams?: { id: string; name: string }[];
   openedAt: string;
   closedAt: string | null;
   createdAt: string;
@@ -96,6 +123,8 @@ export interface TaskDto {
   status: 'todo' | 'in_progress' | 'done' | 'cancelled';
   priority: 'low' | 'normal' | 'high';
   assigneeId: string | null;
+  /** Name of the assignee when they are an active member of this firm. */
+  assigneeName?: string | null;
   dueAt: string | null;
   completedAt: string | null;
   createdAt: string;
@@ -112,6 +141,13 @@ export interface EventDto {
   location: string | null;
   attendeeIds: string[];
   status: 'scheduled' | 'completed' | 'cancelled';
+  source?: 'manual';
+  outcome?: {
+    result: string;
+    notes: string;
+    nextHearingOn: string | null;
+    reviewStatus: 'draft' | 'reviewed';
+  } | null;
 }
 export interface TextStatusDto {
   status: 'pending' | 'processing' | 'done' | 'failed';
@@ -292,6 +328,7 @@ export interface InvoiceSummaryDto {
   subtotalCents: number;
   taxRateBp: number;
   taxCents: number;
+  accountantReviewedAt: string | null;
   totalCents: number;
   amountPaidCents: number;
   balanceCents: number;
@@ -497,6 +534,36 @@ export function createStaffClient(options: ClientOptions) {
     matter: (id: string) => get<MatterDto>(`/matters/${id}`),
     createMatter: (b: Record<string, unknown>) => post<MatterDto>('/matters', b, idem()),
     updateMatter: (id: string, b: Record<string, unknown>) => patch<MatterDto>(`/matters/${id}`, b),
+    verifyCourt: (id: string) => post<MatterDto>(`/matters/${id}/court/verify`, {}),
+    courtProvider: () =>
+      get<{ status: string; lookup: string; detail: string; fileDrop?: string }>(
+        '/courts/provider',
+      ),
+    courtFeed: () =>
+      get<{ mode: string; lookup: string; detail: string; liveProvider?: string }>('/courts/feed'),
+    courtImports: () => get<{ mode: string; data: CourtImportDto[] }>('/courts/imports'),
+    importCourtRows: (b: { rows: Record<string, unknown>[] }) =>
+      post<{ appliedToMatter: boolean; results: { externalId: string; outcome: string; id: string }[] }>(
+        '/courts/imports',
+        b,
+      ),
+    applyCourtImport: (id: string, b: { matterId: string; note?: string }) =>
+      post<{
+        import: CourtImportDto;
+        matterId: string;
+        trackingSource: string;
+        freshness: string;
+      }>(`/courts/imports/${id}/apply`, b),
+    deadlines: () => get<{ data: Record<string, unknown>[] }>('/deadlines'),
+    createDeadline: (b: Record<string, unknown>) => post('/deadlines', b),
+    submitDeadline: (id: string) => post(`/deadlines/${id}/submit`, {}),
+    approveDeadline: (id: string) => post(`/deadlines/${id}/approve`, {}),
+    outbox: () => get<{ data: Record<string, unknown>[] }>('/outbox'),
+    createOutbox: (b: Record<string, unknown>) => post('/outbox', b),
+    approveOutbox: (id: string) => post(`/outbox/${id}/approve`, {}),
+    recordOutcome: (id: string, b: Record<string, unknown>) =>
+      post(`/calendar/events/${id}/outcome`, b),
+    reviewOutcome: (id: string) => post(`/calendar/events/${id}/outcome/review`, {}),
     parties: (id: string) => get<{ data: PartyDto[] }>(`/matters/${id}/parties`),
     addParty: (id: string, b: Record<string, unknown>) =>
       post<PartyDto>(`/matters/${id}/parties`, b),
@@ -626,6 +693,7 @@ export function createStaffClient(options: ClientOptions) {
     removeInvoiceLine: (id: string, lineId: string) =>
       del<InvoiceDto>(`/invoices/${id}/lines/${lineId}`),
     issueInvoice: (id: string) => post<InvoiceDto>(`/invoices/${id}/issue`),
+    reviewInvoiceTax: (id: string) => post<InvoiceDto>(`/invoices/${id}/accountant-review`),
     recordPayment: (id: string, b: Record<string, unknown>) =>
       post<InvoiceDto>(`/invoices/${id}/payments`, b, idem()),
     voidInvoice: (id: string, reason: string) =>

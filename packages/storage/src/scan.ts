@@ -44,7 +44,15 @@ export class ClamAvScanProvider implements ScanProvider {
       socket.setTimeout(this.timeoutMs, () => done(() => reject(new Error('clamd timed out'))));
       socket.on('error', (e) => done(() => reject(e)));
       socket.on('data', (d) => (reply += d.toString('utf8')));
-      socket.on('close', () => done(() => resolve(parseReply(reply))));
+      socket.on('close', () =>
+        done(() => {
+          try {
+            resolve(parseReply(reply));
+          } catch (e) {
+            reject(e instanceof Error ? e : new Error(String(e)));
+          }
+        }),
+      );
       content.on('error', (e) => done(() => reject(e)));
 
       socket.on('connect', () => {

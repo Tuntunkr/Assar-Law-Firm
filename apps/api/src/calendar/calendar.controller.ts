@@ -10,7 +10,12 @@ import {
   Query,
   Req,
 } from '@nestjs/common';
-import { createEventSchema, eventListQuerySchema, updateEventSchema } from '@assar/validation';
+import {
+  createEventSchema,
+  eventListQuerySchema,
+  hearingOutcomeSchema,
+  updateEventSchema,
+} from '@assar/validation';
 import type { z } from 'zod';
 import type { AppRequest, AuthContext } from '../common/auth-context';
 import { Auth, RequirePermissions } from '../common/decorators';
@@ -46,6 +51,33 @@ export class CalendarController {
   @Get(':id')
   get(@Auth() auth: AuthContext, @Param('id', ObjectIdPipe) id: string, @Req() req: AppRequest) {
     return this.calendar.get(auth, id, req);
+  }
+
+  @RequirePermissions('calendar:write')
+  @Post(':id/outcome')
+  outcome(
+    @Auth() auth: AuthContext,
+    @Param('id', ObjectIdPipe) id: string,
+    @Body(new ZodPipe(hearingOutcomeSchema)) body: z.infer<typeof hearingOutcomeSchema>,
+    @Req() req: AppRequest,
+  ) {
+    return this.calendar.recordOutcome(auth, id, body, req, false);
+  }
+
+  @RequirePermissions('hearing:review')
+  @Post(':id/outcome/review')
+  review(@Auth() auth: AuthContext, @Param('id', ObjectIdPipe) id: string, @Req() req: AppRequest) {
+    return this.calendar.recordOutcome(auth, id, { result: 'other', notes: 'review' }, req, true);
+  }
+
+  @RequirePermissions('hearing:review')
+  @Post(':id/schedule-next')
+  scheduleNext(
+    @Auth() auth: AuthContext,
+    @Param('id', ObjectIdPipe) id: string,
+    @Req() req: AppRequest,
+  ) {
+    return this.calendar.scheduleNext(auth, id, req);
   }
 
   @RequirePermissions('calendar:write')

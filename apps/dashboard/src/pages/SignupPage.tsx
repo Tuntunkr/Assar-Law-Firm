@@ -110,7 +110,7 @@ export function SignupPage() {
         </Button>
         <p className="text-center text-sm text-navy-600">
           Already have an account?{' '}
-          <Link to="/login" className="font-medium text-accent-700 hover:underline">
+          <Link to="/login" className="inline-flex min-h-11 items-center font-medium text-accent-700 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-500">
             Sign in
           </Link>
         </p>

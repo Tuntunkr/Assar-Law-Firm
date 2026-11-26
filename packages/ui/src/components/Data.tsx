@@ -68,7 +68,7 @@ export function StatusPill({ tone = 'gray', children }: { tone?: PillTone; child
 
 export function Table({ className, ...rest }: HTMLAttributes<HTMLTableElement>) {
   return (
-    <div className="overflow-x-auto rounded-xl border border-navy-100 bg-white shadow-sm">
+    <div className="relative max-w-full min-w-0 overflow-x-auto rounded-xl border border-navy-100 bg-white shadow-sm">
       <table {...rest} className={cn('w-full text-left text-sm', className)} />
     </div>
   );
@@ -102,7 +102,7 @@ export function Tabs<T extends string>({
     <div
       role="tablist"
       aria-label={label}
-      className="mb-5 flex gap-1 overflow-x-auto border-b border-navy-100"
+      className="mb-5 flex max-w-full min-w-0 gap-1 overflow-x-auto border-b border-navy-100"
     >
       {tabs.map((t) => (
         <button
@@ -112,7 +112,7 @@ export function Tabs<T extends string>({
           aria-selected={value === t.id}
           onClick={() => onChange(t.id)}
           className={cn(
-            '-mb-px whitespace-nowrap border-b-2 px-4 py-2 text-sm font-medium',
+            '-mb-px inline-flex min-h-11 items-center whitespace-nowrap border-b-2 px-4 py-2 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-500',
             value === t.id
               ? 'border-accent-600 text-accent-700'
               : 'border-transparent text-navy-600 hover:text-navy-900',

@@ -1,5 +1,7 @@
 # Mandatory modules: status and build plan
 
+> Historical gap list from before the approved modules. It is not the fulfilment record. Court fields, OCR, typed dates, the message outbox, and the WhatsApp adapter now exist in the branch. What is fulfilled, and what still needs an external key or a court feed, is in `docs/prd/approved-practice-modules.md`. A row marked missing below may already have been built.
+
 The five product modules every firm needs. Status is **as verified in the code**, not as hoped.
 
 Legend: ✅ built and used by the dashboard · 🟡 API exists, no UI (or partial) · ❌ not built
